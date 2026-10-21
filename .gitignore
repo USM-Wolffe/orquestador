@@ -1,0 +1,9 @@
+config.json
+trabajos/
+estado.json
+sesiones.json
+registro.log
+.puente.lock
+__pycache__/
+.venv/
+out/
