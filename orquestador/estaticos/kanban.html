@@ -1,0 +1,22 @@
+<!doctype html>
+<html lang="es-CL">
+<head>
+<meta charset="utf-8">
+<title>Orquestador · tareas</title>
+<link rel="stylesheet" href="/static/app.css">
+<script src="/static/app.js" defer></script>
+</head>
+<body data-pagina="kanban">
+<header>
+  <nav><strong>Orquestador</strong> <a href="/">Tareas</a> <a href="/consumo">Consumo</a></nav>
+  <p id="aviso" class="aviso" hidden></p>
+</header>
+<main>
+  <div class="filtros">
+    <label>Proyecto <select id="f-proyecto"><option value="">todos</option></select></label>
+    <label>Agente <select id="f-agente"><option value="">todos</option></select></label>
+  </div>
+  <div id="kanban" class="kanban"></div>
+</main>
+</body>
+</html>

@@ -1,0 +1,26 @@
+<!doctype html>
+<html lang="es-CL">
+<head>
+<meta charset="utf-8">
+<title>Orquestador · detalle</title>
+<link rel="stylesheet" href="/static/app.css">
+<script src="/static/app.js" defer></script>
+</head>
+<body data-pagina="detalle">
+<header>
+  <nav><strong>Orquestador</strong> <a href="/">Tareas</a> <a href="/consumo">Consumo</a></nav>
+  <p id="aviso" class="aviso" hidden></p>
+</header>
+<main>
+  <h1 id="titulo">Tarea</h1>
+  <section id="gate" class="gate" hidden></section>
+  <section><h2>Campos</h2><dl id="campos"></dl></section>
+  <section><h2>Niveles de garantía</h2><dl id="niveles"></dl></section>
+  <section><h2>Diff stat</h2><div id="diff"></div></section>
+  <section><h2>Resultado</h2><pre id="informe"></pre><dl id="resultado"></dl></section>
+  <section><h2>Consumo</h2><dl id="consumo"></dl></section>
+  <section><h2>Actividad del intento actual</h2><ol id="actividad" class="actividad"></ol></section>
+  <section><h2>Historial</h2><ol id="historial"></ol></section>
+</main>
+</body>
+</html>

@@ -1,0 +1,28 @@
+<!doctype html>
+<html lang="es-CL">
+<head>
+<meta charset="utf-8">
+<title>Orquestador · consumo</title>
+<link rel="stylesheet" href="/static/app.css">
+<script src="/static/app.js" defer></script>
+</head>
+<body data-pagina="consumo">
+<header>
+  <nav><strong>Orquestador</strong> <a href="/">Tareas</a> <a href="/consumo">Consumo</a></nav>
+  <p id="aviso" class="aviso" hidden></p>
+</header>
+<main>
+  <div class="filtros">
+    <label>Proyecto <select id="f-proyecto"><option value="">todos</option></select></label>
+    <label>Desde <input id="f-desde" type="date"></label>
+    <label>Hasta <input id="f-hasta" type="date"></label>
+  </div>
+  <table id="tabla-consumo">
+    <thead><tr><th>Agente</th><th>Tareas</th><th>Intentos</th><th>Tiempo</th><th>Tokens entrada</th>
+      <th>Tokens salida</th><th>Caché lectura</th><th>Caché escritura</th><th>Costo</th><th>Límites del plan</th>
+      <th>Próximo reinicio</th></tr></thead>
+    <tbody></tbody>
+  </table>
+</main>
+</body>
+</html>

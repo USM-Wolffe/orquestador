@@ -1,0 +1,29 @@
+{
+  "nombre": "demo",
+  "repo": "C:\\ruta\\al\\repo-demo",
+  "base": "main",
+  "agentes_permitidos": [
+    "cc"
+  ],
+  "limites": {
+    "por_agente": {
+      "cc": 1
+    }
+  },
+  "permisos": {
+    "permitir_extra": [],
+    "denegar_extra": [],
+    "variables_permitidas": []
+  },
+  "red": {
+    "permitida": false,
+    "dominios": []
+  },
+  "gate_por_defecto": true,
+  "timeout_min": 90,
+  "huellas_aprobadas": {},
+  "eventos": {
+    "texto_mensajes": "truncado"
+  },
+  "facturar_por_api": false
+}

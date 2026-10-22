@@ -1,0 +1,26 @@
+{
+  "limites": {
+    "global": 2,
+    "por_agente": {
+      "cc": 1
+    }
+  },
+  "agentes": {
+    "cc": {
+      "ejecutable": "%USERPROFILE%\\.local\\bin\\claude.exe",
+      "habilitado": true,
+      "restricted": true
+    }
+  },
+  "herramientas": {
+    "git": "C:\\Program Files\\Git\\cmd\\git.exe"
+  },
+  "tablero": {
+    "puerto": 8765
+  },
+  "eventos": {
+    "tope_mb": 10,
+    "rotados": 5
+  },
+  "intervalo_s": 2.0
+}
