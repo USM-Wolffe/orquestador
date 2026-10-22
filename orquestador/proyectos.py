@@ -193,7 +193,7 @@ def _cargar_uno(config: Config, carpeta: Path) -> Proyecto:
             p.errores.append("las reglas de permisos deben ser textos")
         else:
             for regla in permitir:
-                if regla_quita_denegacion(regla):
+                if regla_quita_denegacion(regla):  # también rechaza `mcp__…`: el nombre no calza con el patrón
                     p.errores.append(f"'{regla}' quitaría una denegación obligatoria de seguridad")
             p.permitir_extra, p.denegar_extra = list(permitir), list(denegar)
         variables = permisos.get("variables_permitidas", []) or []

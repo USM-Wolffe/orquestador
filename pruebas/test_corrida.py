@@ -59,7 +59,7 @@ class BaseCorrida(unittest.TestCase):
         argv = [sys.executable, str(FALSO), "--como", "cc", "-p", "--output-format", "stream-json", "--verbose",
                 "--session-id", str(uuid.uuid4())]
         return Lanzamiento(argv=argv, env={**os.environ, "ORQ_FALSO_TRAZA": str(self.traza)}, cwd=self.tmp,
-                           stdin=f"#guion: {guion}\n")
+                           stdin=f"#guion: {guion}\n", herramientas_esperadas=("Read", "Edit", "Write", "Glob", "Grep", "Bash"))
 
     def opciones(self, **extra) -> OpcionesCorrida:
         return OpcionesCorrida(timeout_s=extra.pop("timeout_s", 60), al_lanzar=lambda pid, c: self.pids.append(pid),
@@ -131,6 +131,53 @@ class PruebaOrquestadorMuere(unittest.TestCase):
                 mini.kill()
                 mini.wait(10)
             mini.stdout.close()
+
+
+
+
+class PruebaHerramientasOperacion(BaseCorrida):
+    def test_cortes_matan_proceso(self):
+        for guion, nombre in (("conectores", "mcp__claude_ai_Google_Drive__share_file"),
+                              ("mcp_pendiente", "servidor_sintetico"),
+                              ("herramienta_tarde", "mcp__claude_ai_Gamma__generate"),
+                              ("sin_init", "no informó sus herramientas")):
+            with self.subTest(guion=guion):
+                r = correr(self.cc, self.lanzamiento_cc(guion), EstadoLectura(worktree=self.tmp),
+                           self.escritor, "T-1", 1, self.opciones(timeout_s=5))
+                self.assertFalse(r.ok)
+                self.assertEqual(r.error["clase"], "seguridad")
+                self.assertIn(nombre, r.error["mensaje"])
+                self.assertLess(r.duracion_s, 15, "el corte debe terminar al agente sin esperar su salida")
+                self.assertTrue(esperar_muerto(self.pids[-1]))
+                for linea in self.traza.read_text(encoding="utf-8").splitlines():
+                    registro = json.loads(linea)
+                    if "hijo" in registro:
+                        self.assertTrue(esperar_muerto(registro["hijo"]))
+
+    def test_listas_completas_y_herramienta_faltante(self):
+        from orquestador.corrida import VigilanciaHerramientas
+        tools = [f"T{i}" for i in range(60)]
+        vig = VigilanciaHerramientas(tools)
+        def init(tools, mcp):
+            return json.dumps({"type": "system", "subtype": "init", "tools": tools, "mcp_servers": mcp})
+        self.assertIsNone(vig.revisar(init(tools[:-1], [])))
+        self.assertIn("intrusa", vig.revisar(init(tools+["intrusa"], [])))
+        self.assertIn("no informó", vig.revisar(init(None, [])))
+        self.assertIn("no informó", vig.revisar(init([], None)))
+
+    def test_salida_con_forma_inesperada_corta(self):
+        r = correr(self.cc, self.lanzamiento_cc("forma_inesperada"), EstadoLectura(worktree=self.tmp),
+                   self.escritor, "T-1", 1, self.opciones(timeout_s=20))
+        self.assertEqual(r.error["clase"], "seguridad")
+        self.assertIn("no se pudo revisar la salida del agente", r.error["mensaje"])
+        self.assertLess(r.duracion_s, 15, "el agente no puede seguir corriendo sin vigilancia")
+        self.assertTrue(esperar_muerto(self.pids[-1]))
+
+    def test_herramienta_pedida_ausente_termina_ok(self):
+        lanz = self.lanzamiento_cc("ok")
+        lanz.herramientas_esperadas += ("Opcional",)
+        r = correr(self.cc, lanz, EstadoLectura(worktree=self.tmp), self.escritor, "T-1", 1, self.opciones())
+        self.assertTrue(r.ok, r.error)
 
 
 if __name__ == "__main__":

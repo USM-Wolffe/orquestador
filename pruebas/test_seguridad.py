@@ -60,12 +60,15 @@ class PruebaBanderas(unittest.TestCase):
         seguridad.revisar_comando(self.cc, [sys.executable, "falso.py", "-p", "--permission-mode", "dontAsk"])
 
     def test_prompt_en_los_argumentos(self):
-        lanz = Lanzamiento(argv=["claude", "-p", "haz esto: git push"], env={}, cwd=Path("."),
+        # Con las capas obligatorias completas, para que el error sea el del prompt y no el de una capa faltante.
+        capas = ["--strict-mcp-config", "--disallowedTools", "mcp__*"]
+        env = {"ENABLE_CLAUDEAI_MCP_SERVERS": "false"}
+        lanz = Lanzamiento(argv=["claude", "-p", *capas, "haz esto: git push"], env=env, cwd=Path("."),
                            stdin="haz esto: git push")
-        with self.assertRaises(seguridad.ErrorSeguridad):
+        with self.assertRaisesRegex(seguridad.ErrorSeguridad, "no puede ir en los argumentos"):
             seguridad.revisar_lanzamiento(self.cc, lanz, "haz esto: git push")
-        lanz = Lanzamiento(argv=["claude", "-p"], env={}, cwd=Path("."), stdin=None)
-        with self.assertRaises(seguridad.ErrorSeguridad):
+        lanz = Lanzamiento(argv=["claude", "-p", *capas], env=env, cwd=Path("."), stdin=None)
+        with self.assertRaisesRegex(seguridad.ErrorSeguridad, "solo por la entrada estándar"):
             seguridad.revisar_lanzamiento(self.cc, lanz, "el prompt no va por stdin")
 
 
@@ -220,6 +223,82 @@ class PruebaEnElBucle(PruebaOrq):
         self.assertNotIn("--resume", argv)
         self.assertTrue(seguridad.sesion_valida(argv[argv.index("--session-id") + 1]))
         self.assertIn("id de sesión inválido", (self.raiz / "registro.log").read_text(encoding="utf-8"))
+
+
+
+
+class PruebaCapasOperacion(PruebaOrq):
+    def comprobar_capa(self, capa):
+        self.instalar()
+        orq = self.orquestador()
+        original = orq.adaptadores["cc"].lanzamiento
+        def defectuoso(ctx):
+            lanz = original(ctx)
+            if capa == "entorno":
+                lanz.env["ENABLE_CLAUDEAI_MCP_SERVERS"] = "true"
+            else:
+                i = lanz.argv.index(capa)
+                del lanz.argv[i:i+(2 if capa == "--disallowedTools" else 1)]
+            return lanz
+        orq.adaptadores["cc"].lanzamiento = defectuoso
+        self.pedir(orq, {"id": "T-1", "prompt": "#guion: ok"})
+        self.esperar(orq, lambda: self.tarea(orq, "T-1")["estado"] == "fallida")
+        self.assertEqual(self.tarea(orq, "T-1")["resultado"]["error"]["clase"], "seguridad")
+        self.assertEqual(self.lanzamientos(), [])
+
+
+
+    def test_falta_strict_impide_lanzar(self):
+        self.comprobar_capa("--strict-mcp-config")
+
+    def test_falta_disallowed_impide_lanzar(self):
+        self.comprobar_capa("--disallowedTools")
+
+    def test_falta_entorno_impide_lanzar(self):
+        self.comprobar_capa("entorno")
+
+    def test_proyecto_mcp_inactivo(self):
+        from orquestador import config, proyectos
+        repo = self.crear_repo()
+        self.escribir_config()
+        self.escribir_proyecto("demo", repo, permisos={"permitir_extra": ["mcp__x__y"]})
+        p = proyectos.cargar_proyectos(config.cargar_config())[0]
+        self.assertFalse(p.activo)
+        self.assertIn("mcp__x__y", " ".join(p.errores))
+
+
+class _AdaptadorSinCapas:
+    """Adaptador de prueba que no declara capas propias: las exige el núcleo igual."""
+    banderas_prohibidas, valores_prohibidos = (), {}
+
+    def __init__(self, nombre):
+        self.nombre = nombre
+
+
+class PruebaCapasEnElNucleo(unittest.TestCase):
+    CAPAS = ["--strict-mcp-config", "--disallowedTools", "mcp__*"]
+    ENTORNO = {"ENABLE_CLAUDEAI_MCP_SERVERS": "false"}
+
+    def revisar(self, nombre, argv, env):
+        lanz = Lanzamiento(argv=["claude", "-p", *argv], env=env, cwd=Path("."), stdin="haz la tarea")
+        seguridad.revisar_lanzamiento(_AdaptadorSinCapas(nombre), lanz, "haz la tarea")
+
+    def test_capas_completas_pasan(self):
+        self.revisar("cc", self.CAPAS, self.ENTORNO)
+
+    def test_adaptador_que_no_declara_capas(self):
+        with self.assertRaisesRegex(seguridad.ErrorSeguridad, "--strict-mcp-config"):
+            self.revisar("cc", self.CAPAS[1:], self.ENTORNO)
+        with self.assertRaisesRegex(seguridad.ErrorSeguridad, "ENABLE_CLAUDEAI_MCP_SERVERS"):
+            self.revisar("cc", self.CAPAS, {})
+
+    def test_agente_sin_capas_en_el_nucleo(self):
+        with self.assertRaisesRegex(seguridad.ErrorSeguridad, "no tiene capas obligatorias"):
+            self.revisar("otro", self.CAPAS, self.ENTORNO)
+
+    def test_variable_repetida_con_otras_mayusculas(self):
+        with self.assertRaisesRegex(seguridad.ErrorSeguridad, "ENABLE_CLAUDEAI_MCP_SERVERS"):
+            self.revisar("cc", self.CAPAS, {**self.ENTORNO, "enable_claudeai_mcp_servers": "true"})
 
 
 if __name__ == "__main__":

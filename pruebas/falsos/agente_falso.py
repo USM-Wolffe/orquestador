@@ -69,11 +69,13 @@ def trazar(registro: dict) -> None:
 class Guion:
     def __init__(self, sesion: str, cwd: str, retomada: bool):
         self.sesion, self.cwd, self.retomada, self.n = sesion, cwd, retomada, 0
+        self.tools = (valor(sys.argv, "--tools") or "Read,Edit,Write,Glob,Grep,Bash").split(",")
+        self.mcp = []
 
     def init(self) -> None:  # SDKSystemMessage subtype init (doc agent-sdk/typescript)
         emitir({"type": "system", "subtype": "init", "session_id": self.sesion, "cwd": self.cwd,
                 "model": "claude-sonnet-5-5", "permissionMode": "dontAsk", "apiKeySource": "none",
-                "claude_code_version": "2.1.306", "tools": ["Read", "Edit", "Write", "Glob", "Grep", "Bash"]})
+                "claude_code_version": "2.1.306", "tools": self.tools, "mcp_servers": self.mcp})
 
     def texto(self, texto: str, **extra) -> None:
         emitir({"type": "assistant", "session_id": self.sesion, "parent_tool_use_id": None,
@@ -238,12 +240,34 @@ def guion_intenta_commit(g: Guion) -> int:
     return 0
 
 
-GUIONES = {"ok": guion_ok, "lectura": guion_lectura, "negado": guion_negado, "limite": guion_limite,
+def guion_seguridad(g, nombre):
+    hijo = subprocess.Popen([sys.executable, "-c", "import time; time.sleep(600)"])
+    trazar({"hijo": hijo.pid})
+    if nombre == "conectores":
+        g.tools.append("mcp__claude_ai_Google_Drive__share_file")
+    if nombre == "mcp_pendiente":
+        g.mcp = [{"name": "servidor_sintetico", "status": "pending"}]
+    if nombre != "sin_init":
+        g.init()
+    if nombre == "herramienta_tarde":
+        g.herramienta("mcp__claude_ai_Gamma__generate", {}, "sintético")
+    if nombre == "sin_init":  # una herramienta pedida: lo único que debe cortar es la falta del aviso de inicio
+        g.herramienta("Read", {"file_path": os.path.join(g.cwd, "app.py")}, "sintético")
+    if nombre == "forma_inesperada":  # `message` como texto y no como objeto: el lector no puede revisarlo
+        emitir({"type": "assistant", "session_id": g.sesion, "parent_tool_use_id": None, "message": "texto suelto"})
+    g.resultado("Listo")
+    time.sleep(30)  # el corte debe matar al falso, sin esperar su salida natural
+    return 0
+
+
+GUIONES = {n: (lambda g, n=n: guion_seguridad(g, n)) for n in
+           ("conectores", "mcp_pendiente", "herramienta_tarde", "sin_init", "forma_inesperada")}
+GUIONES.update({"ok": guion_ok, "lectura": guion_lectura, "negado": guion_negado, "limite": guion_limite,
            "limite_texto": guion_limite_texto, "limite_sin_hora": guion_limite_sin_hora, "error": guion_error, "sin_final": guion_sin_final,
            "colgado": guion_colgado, "hijo_largo": guion_hijo_largo, "sesion_inexistente": guion_sesion_inexistente,
            "intenta_commit": guion_intenta_commit, "limite_una_vez": guion_limite_una_vez,
            "colgado_una_vez": guion_colgado_una_vez, "secretos": guion_secretos,
-           "edita_y_espera": guion_edita_y_espera}
+           "edita_y_espera": guion_edita_y_espera})
 
 
 def main() -> int:

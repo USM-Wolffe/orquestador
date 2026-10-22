@@ -214,3 +214,29 @@ archivo cuando se repite). "Manual" remite a `docs/verificacion-manual.md`.
 - `--restricted` con OAuth, `--permission-prompts none` y la versión con `claude auth status`: manual §1 a §3.
 - Gate por botón en un navegador real y conexión desde otra interfaz: manual §4.
 - Conectar la carpeta de Cowork en la app: manual §5.
+
+## Operación v1 — parte A
+
+Specs de `openspec/changes/operacion-v1/specs/` (seguridad-agentes y adaptadores-agente). Cada escenario tiene
+además una mutación en `out/mutaciones.py` que hace fallar su prueba.
+
+| Escenario | Prueba |
+|---|---|
+| Cinco capas, variable heredada y respaldo | test_adaptador_cc.PruebaConectoresOperacion.test_capas_con_variable_heredada_y_respaldo |
+| Listas de inicio, 60 nombres y omitidos | test_adaptador_cc.PruebaConectoresOperacion.test_inicio_listas_y_omitidas |
+| Aviso sin listas | test_adaptador_cc.PruebaConectoresOperacion.test_inicio_sin_listas; test_corrida.PruebaHerramientasOperacion.test_listas_completas_y_herramienta_faltante |
+| Lista tolerada fija, sin MCP | test_adaptador_cc.PruebaConectoresOperacion.test_toleradas_vacias_y_sin_mcp |
+| Inicio limpio y matriz | test_adaptador_cc.PruebaConectoresOperacion.test_inicio_limpio_guarda_listas_y_matriz |
+| Capa ausente, no se lanza | test_seguridad.PruebaCapasOperacion.test_falta_strict_impide_lanzar; test_falta_disallowed_impide_lanzar; test_falta_entorno_impide_lanzar |
+| Adaptador que no declara las capas; agente sin capas en el núcleo; variable repetida con otras mayúsculas | test_seguridad.PruebaCapasEnElNucleo |
+| Salida que no se puede revisar | test_corrida.PruebaHerramientasOperacion.test_salida_con_forma_inesperada_corta |
+| Proyecto que abre MCP | test_seguridad.PruebaCapasOperacion.test_proyecto_mcp_inactivo |
+| Conectores, MCP pending, herramienta tardía y sin inicio (con una herramienta pedida); mueren agente e hijo en menos de 15 s | test_corrida.PruebaHerramientasOperacion.test_cortes_matan_proceso |
+| Matriz con el control nuevo | test_auditoria.PruebaAuditoriaEnElBucle.test_matriz_de_cc_en_windows |
+| Comparación completa, sobrante después del nombre 40 | test_corrida.PruebaHerramientasOperacion.test_listas_completas_y_herramienta_faltante |
+| Herramienta pedida ausente | test_corrida.PruebaHerramientasOperacion.test_herramienta_pedida_ausente_termina_ok |
+| Fallida sin reintentos | test_planificador.PruebaCorteOperacion.test_conectores_sin_reintento; test_mcp_pendiente_sin_reintento; test_herramienta_tarde_sin_reintento; test_sin_init_sin_reintento |
+| Tope de 4096 bytes con nombres largos | test_eventos_topes.PruebaTopeInicioOperacion.test_sesenta_nombres_largos_respetan_tope |
+| Paso 7, cinco capas, campos y subpasos | test_documentacion.PruebaConectoresDocumentados.test_paso_siete_cinco_capas_y_campos |
+
+- Las capas con el binario real (cuál basta sola, herramientas propias y escala de `utilization`): manual §7.

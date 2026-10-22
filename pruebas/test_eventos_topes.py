@@ -154,5 +154,24 @@ class PruebaTopesPorConfiguracion(PruebaOrq):
         self.assertIn("demo", registro_log)
 
 
+
+
+class PruebaTopeInicioOperacion(unittest.TestCase):
+    def test_sesenta_nombres_largos_respetan_tope(self):
+        import tempfile
+        from pathlib import Path
+        from orquestador.eventos import EscritorEventos, TOPE_LINEA
+        from orquestador.adaptadores.cc import AdaptadorCC
+        from orquestador.adaptadores.base import EstadoLectura
+        with tempfile.TemporaryDirectory() as tmp:
+            escritor = EscritorEventos(Path(tmp), "demo")
+            datos = AdaptadorCC(None).normalizar({"type": "system", "subtype": "init",
+                "tools": [f"H{i}" + "á"*190 for i in range(60)], "mcp_servers": []},
+                EstadoLectura(worktree=Path(tmp)))[0][1]
+            evento = escritor.escribir("inicio", datos)
+            self.assertLessEqual(len(escritor.archivo.read_bytes()), TOPE_LINEA)
+            self.assertEqual(len(evento["datos"]["herramientas"]) + evento["datos"]["herramientas_omitidas"], 60)
+
+
 if __name__ == "__main__":
     unittest.main()

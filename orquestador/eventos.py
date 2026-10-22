@@ -24,7 +24,7 @@ TOPE_LINEA = 4096
 TOPE_DETALLE = 2000
 DETALLE = frozenset({"mensaje", "herramienta", "comando"})
 CAMPOS = {
-    "inicio": frozenset({"sesion", "modelo", "retomada", "version", "niveles", "advertencias"}),
+    "inicio": frozenset({"sesion", "modelo", "retomada", "version", "niveles", "advertencias", "herramientas", "herramientas_omitidas", "mcp"}),
     "mensaje": frozenset({"texto"}),
     "herramienta": frozenset({"nombre", "objetivo", "estado"}),
     "archivo": frozenset({"ruta", "accion"}),
@@ -153,6 +153,8 @@ class EscritorEventos:
                                  if k in CAMPOS_CONSUMO and (v is None or isinstance(v, (bool, int, float)))}
             elif clave == "niveles" and isinstance(valor, dict):
                 limpio[clave] = {self._texto("nivel", str(k)): self._texto("nivel", str(v)) for k, v in valor.items()}
+            elif clave in ("herramientas", "mcp") and isinstance(valor, list):
+                limpio[clave] = [self._texto(clave, str(v)) for v in valor[:40]]
             elif clave == "advertencias" and isinstance(valor, list):
                 limpio[clave] = [self._texto("advertencia", str(v)) for v in valor[:MAX_ADVERTENCIAS]]
             # cualquier otro tipo de valor se descarta
@@ -162,9 +164,17 @@ class EscritorEventos:
     def _a_linea(evento: dict) -> bytes:
         linea = (json.dumps(evento, ensure_ascii=False) + "\n").encode("utf-8")
         while len(linea) > TOPE_LINEA:
-            textos = [(k, v) for k, v in evento["datos"].items() if isinstance(v, str)]
+            textos = [(k, v) for k, v in evento["datos"].items() if isinstance(v, str) and len(v) > len(MARCA_TRUNCADO) + 1]
             if not textos:
-                break
+                listas = [(k, v) for k, v in evento["datos"].items() if isinstance(v, list) and v]
+                if not listas:
+                    break
+                clave, valores = max(listas, key=lambda kv: len(str(kv[1])))
+                valores.pop()
+                if clave == "herramientas":
+                    evento["datos"]["herramientas_omitidas"] = evento["datos"].get("herramientas_omitidas", 0) + 1
+                linea = (json.dumps(evento, ensure_ascii=False) + "\n").encode("utf-8")
+                continue
             clave, valor = max(textos, key=lambda kv: len(kv[1].encode("utf-8")))
             if len(valor) <= len(MARCA_TRUNCADO) + 1:
                 break

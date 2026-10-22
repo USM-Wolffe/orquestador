@@ -83,6 +83,8 @@ def correr(adaptador: Adaptador, lanz: Lanzamiento, estado: EstadoLectura, escri
             terminar_pid(proceso.pid)
 
     corte = None
+    vigilancia = VigilanciaHerramientas(lanz.herramientas_esperadas)
+    error_seguridad = None
     while True:
         if corte is None:
             if opciones.cancelar.is_set():
@@ -97,7 +99,18 @@ def correr(adaptador: Adaptador, lanz: Lanzamiento, estado: EstadoLectura, escri
             continue
         if linea is None:
             break
-        _procesar_linea(adaptador, linea, estado, escritor, tarea, intento, opciones)
+        if corte == "seguridad":
+            continue  # tras el corte no se registra ni se usa nada más de lo que diga el agente
+        try:
+            if corte is None:
+                error_seguridad = vigilancia.revisar(linea)
+            if not error_seguridad:
+                _procesar_linea(adaptador, linea, estado, escritor, tarea, intento, opciones)
+        except Exception as e:  # noqa: BLE001 - lo que no se puede revisar corta la corrida (falla cerrada)
+            error_seguridad = f"no se pudo revisar la salida del agente ({type(e).__name__})"
+        if error_seguridad:
+            corte = "seguridad"
+            terminar()
     try:
         proceso.wait(timeout=30)
     except subprocess.TimeoutExpired:
@@ -115,7 +128,10 @@ def correr(adaptador: Adaptador, lanz: Lanzamiento, estado: EstadoLectura, escri
     duracion = time.monotonic() - inicio
     stderr = redactar("".join(cola_err)[-TOPE_STDERR:], opciones.patrones_extra)
     resultado = adaptador.cierre(estado, proceso.returncode, stderr, duracion)
-    if corte == "timeout":
+    if corte == "seguridad":
+        resultado.ok, resultado.limite = False, None
+        resultado.error = {"clase": "seguridad", "mensaje": error_seguridad}
+    elif corte == "timeout":
         resultado.ok, resultado.limite = False, None
         resultado.error = {"clase": "timeout", "mensaje": f"se acabó el tiempo del intento ({opciones.timeout_s:.0f} s)"}
     elif corte == "cancelada":
@@ -126,6 +142,40 @@ def correr(adaptador: Adaptador, lanz: Lanzamiento, estado: EstadoLectura, escri
     escritor.escribir("fin", {"ok": resultado.ok, "duracion_s": round(duracion, 1), "consumo": resultado.consumo},
                       tarea=tarea, intento=intento, agente=adaptador.nombre)
     return resultado
+
+
+class VigilanciaHerramientas:
+    """Comprueba listas completas. Vigilar tool_use detecta; no garantiza ganar la carrera a la llamada."""
+    def __init__(self, esperadas):
+        self.esperadas = set(esperadas)
+        self.vistas = None
+
+    def revisar(self, linea):
+        try:
+            obj = json.loads(linea)
+        except ValueError:
+            return None
+        if not isinstance(obj, dict):
+            return None
+        if obj.get("type") == "system" and obj.get("subtype") == "init":
+            tools, mcp = obj.get("tools"), obj.get("mcp_servers")
+            if (not isinstance(tools, list) or not all(isinstance(x, str) for x in tools)
+                    or not isinstance(mcp, list) or not all(isinstance(x, dict) and isinstance(x.get("name"), str) for x in mcp)):
+                return "el agente no informó sus herramientas"
+            sobrantes = sorted(set(tools) - self.esperadas)
+            if sobrantes or mcp:
+                nombres = sobrantes + [x["name"] for x in mcp]
+                return "herramientas no pedidas: " + ", ".join(nombres[:10]) + (f" ({len(nombres)-10} más)" if len(nombres)>10 else "")
+            self.vistas = set(tools)
+        if obj.get("type") == "assistant":
+            for bloque in (obj.get("message") or {}).get("content") or []:
+                if isinstance(bloque, dict) and bloque.get("type") == "tool_use":
+                    nombre = bloque.get("name")
+                    if self.vistas is None:
+                        return "el agente no informó sus herramientas: " + str(nombre)
+                    if nombre not in self.vistas:
+                        return "herramientas no pedidas: " + str(nombre)
+        return None
 
 
 def _procesar_linea(adaptador, linea: str, estado, escritor, tarea, intento, opciones) -> None:
@@ -145,7 +195,9 @@ def _procesar_linea(adaptador, linea: str, estado, escritor, tarea, intento, opc
             escritor.ignorado(tarea, intento)
             continue
         if tipo == "inicio":
-            datos = {**datos, "niveles": opciones.niveles, "advertencias": opciones.advertencias}
+            datos = {**datos, "niveles": opciones.niveles,
+                     "advertencias": [*opciones.advertencias,
+                         "La vigilancia de herramientas es detección: no garantiza que la llamada no haya empezado."]}
         escritor.escribir(tipo, datos, tarea=tarea, intento=intento, agente=adaptador.nombre)
         if tipo == "archivo" and opciones.al_archivo:
             opciones.al_archivo()

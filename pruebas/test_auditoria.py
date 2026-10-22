@@ -50,7 +50,8 @@ class PruebaAuditoriaEnElBucle(PruebaOrq):
     def test_matriz_de_cc_en_windows(self):
         self.assertEqual(seguridad.niveles("cc", "windows"),
                          {"bypass": "duro", "git": "instruccion", "credenciales": "instruccion",
-                          "escritura": "instruccion", "red": "instruccion"})
+                          "escritura": "instruccion", "red": "instruccion",
+                          "conectores y MCP no declarados": "duro"})
 
 
 class PruebaFotoDeGit(PruebaOrq):

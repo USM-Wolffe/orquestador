@@ -30,6 +30,7 @@ class Lanzamiento:
     cwd: Path
     stdin: str | None
     archivos: dict[Path, bytes] = field(default_factory=dict)  # se escriben antes de lanzar (p. ej. el perfil)
+    herramientas_esperadas: tuple[str, ...] = ()
 
 
 @dataclass
@@ -74,7 +75,7 @@ class Adaptador(Protocol):
     version_minima: str
     version_verificada: str
     banderas_prohibidas: tuple[str, ...]
-    valores_prohibidos: dict[str, tuple[str, ...]]
+    valores_prohibidos: dict[str, tuple[str, ...]]  # las capas obligatorias las fija seguridad.CAPAS_OBLIGATORIAS
 
     def lanzamiento(self, ctx: ContextoLanzamiento) -> Lanzamiento: ...
 

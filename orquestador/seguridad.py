@@ -27,10 +27,17 @@ CAMPOS_SKILL_PELIGROSOS = re.compile(r"^(allowed-tools|hooks)\s*:", re.MULTILINE
 # o "instruccion" (depende del modelo, o de una regla que se rodea con un intérprete). Ver design D7.
 MATRIZ = {
     ("cc", "windows"): {"bypass": "duro", "git": "instruccion", "credenciales": "instruccion",
-                        "escritura": "instruccion", "red": "instruccion"},
+                        "escritura": "instruccion", "red": "instruccion", "conectores y MCP no declarados": "duro"},
     # En E1 el sandbox de Claude Code no se activa en ninguna plataforma: mismos niveles fuera de Windows.
     ("cc", "otra"): {"bypass": "duro", "git": "instruccion", "credenciales": "instruccion",
-                     "escritura": "instruccion", "red": "instruccion"},
+                     "escritura": "instruccion", "red": "instruccion", "conectores y MCP no declarados": "duro"},
+}
+
+# Capas que apagan los conectores de claude.ai y los MCP, por agente (design D1 de operacion-v1). Las fija el núcleo y
+# no el adaptador: un adaptador que no las declare, o un agente sin entrada aquí, no se lanza.
+CAPAS_OBLIGATORIAS = {
+    "cc": {"banderas": (("--strict-mcp-config",), ("--disallowedTools", "mcp__*")),
+           "entorno": {"ENABLE_CLAUDEAI_MCP_SERVERS": "false"}},
 }
 
 
@@ -71,8 +78,18 @@ def revisar_comando(adaptador, argv: list[str]) -> None:
 
 
 def revisar_lanzamiento(adaptador, lanz, prompt: str) -> None:
-    """Banderas prohibidas, y que el texto libre de la tarea no viaje en los argumentos."""
+    """Banderas prohibidas, capas obligatorias del agente y que el texto libre de la tarea no viaje en los argumentos."""
     revisar_comando(adaptador, lanz.argv)
+    capas = CAPAS_OBLIGATORIAS.get(adaptador.nombre)
+    if capas is None:
+        raise ErrorSeguridad(f"el agente {adaptador.nombre} no tiene capas obligatorias en el núcleo")
+    for secuencia in capas["banderas"]:
+        if not any(tuple(lanz.argv[i:i+len(secuencia)]) == secuencia for i in range(len(lanz.argv))):
+            raise ErrorSeguridad("falta bandera obligatoria: " + " ".join(secuencia))
+    for clave, valor in capas["entorno"].items():
+        # Windows no distingue mayúsculas en el entorno: ninguna copia de la variable puede traer otro valor.
+        if [v for k, v in lanz.env.items() if k.upper() == clave.upper()] != [valor]:
+            raise ErrorSeguridad("falta entorno obligatorio: " + clave)
     if prompt and prompt.strip():
         for token in lanz.argv:
             if prompt.strip() in token:

@@ -206,5 +206,59 @@ class PruebaVersion(BaseCC):
         self.assertFalse(self.version("sin número")["disponible"])
 
 
+
+
+class PruebaConectoresOperacion(BaseCC):
+    def test_capas_con_variable_heredada_y_respaldo(self):
+        for restricted in (True, False):
+            with self.subTest(restricted=restricted):
+                self.adaptador.agente.restricted = restricted
+                lanz = self.adaptador.lanzamiento(self.ctx(entorno={"ENABLE_CLAUDEAI_MCP_SERVERS": "true"}))
+                self.assertEqual(lanz.env["ENABLE_CLAUDEAI_MCP_SERVERS"], "false")
+                self.assertEqual(lanz.argv[lanz.argv.index("--disallowedTools")+1], "mcp__*")
+                perfil = json.loads(next(iter(lanz.archivos.values())))
+                self.assertTrue(perfil["disableClaudeAiConnectors"])
+                self.assertIn("mcp__*", perfil["permissions"]["deny"])
+                from orquestador.adaptadores.cc import HERRAMIENTAS_TOLERADAS
+                pedidas = set(lanz.argv[lanz.argv.index("--tools")+1].split(","))
+                self.assertEqual(set(lanz.herramientas_esperadas), pedidas | set(HERRAMIENTAS_TOLERADAS))
+
+    def test_inicio_listas_y_omitidas(self):
+        estado = EstadoLectura(worktree=self.wt)
+        for cantidad in (2, 60):
+            tools = [f"Herramienta{i}" for i in range(cantidad)]
+            datos = self.adaptador.normalizar({"type": "system", "subtype": "init", "tools": tools,
+                                               "mcp_servers": [{"name": "sintetico", "status": "pending"}]}, estado)[0][1]
+            self.assertEqual(datos["herramientas"], tools[:40])
+            self.assertEqual(datos["herramientas_omitidas"], max(0, cantidad-40))
+            self.assertEqual(datos["mcp"], ["sintetico"])
+
+    def test_inicio_sin_listas(self):
+        for extra in ({}, {"tools": [], "mcp_servers": None}, {"tools": "Read", "mcp_servers": []}):
+            datos = self.adaptador.normalizar({"type": "system", "subtype": "init", **extra},
+                                             EstadoLectura(worktree=self.wt))[0][1]
+            self.assertIsNone(datos["herramientas"])
+
+    def test_toleradas_vacias_y_sin_mcp(self):
+        from orquestador.adaptadores.cc import HERRAMIENTAS_TOLERADAS
+        # Sin exigir que esté vacía: Sebastian la llena en la tarea 1.5.
+        for nombre, evidencia in HERRAMIENTAS_TOLERADAS.items():
+            self.assertFalse(nombre.startswith("mcp__"))
+            self.assertIn("version", evidencia)
+            self.assertIn("fecha", evidencia)
+
+    def test_inicio_limpio_guarda_listas_y_matriz(self):
+        lanz = self.adaptador.lanzamiento(self.ctx())
+        escritor = EscritorEventos(self.tmp / "eventos", "demo")
+        r = correr(self.adaptador, lanz, EstadoLectura(worktree=self.wt), escritor, "T-1", 1,
+                   OpcionesCorrida(timeout_s=10, niveles=seguridad.niveles("cc")))
+        self.assertTrue(r.ok, r.error)
+        evento = next(json.loads(x) for x in escritor.archivo.read_text(encoding="utf-8").splitlines()
+                      if json.loads(x)["tipo"] == "inicio")
+        self.assertEqual(evento["datos"]["herramientas"], lanz.argv[lanz.argv.index("--tools")+1].split(","))
+        self.assertEqual(evento["datos"]["mcp"], [])
+        self.assertEqual(evento["datos"]["niveles"]["conectores y MCP no declarados"], "duro")
+
+
 if __name__ == "__main__":
     unittest.main()

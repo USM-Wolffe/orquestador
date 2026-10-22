@@ -197,5 +197,34 @@ class PruebaEventosDeSeguridad(BasePlanificador):
         self.assertTrue([e for e in self.eventos(orq) if e["datos"].get("clase") == "seguridad"])
 
 
+
+
+class PruebaCorteOperacion(BasePlanificador):
+    def comprobar_corte(self, guion):
+        from orquestador import procesos
+        self.instalar()
+        orq = self.orquestador()
+        self.pedir(orq, {"id": "T-1", "prompt": f"#guion: {guion}"})
+        self.esperar(orq, lambda: self.tarea(orq, "T-1")["estado"] == "fallida", timeout=20)
+        t = self.tarea(orq, "T-1")
+        self.assertEqual(t["resultado"]["error"]["clase"], "seguridad")
+        self.assertEqual(t["intentos"], 1)
+        self.assertEqual(len(t["corridas"]), 1)
+        for lanzamiento in self.lanzamientos():
+            self.assertFalse(procesos.proceso_vivo(lanzamiento["pid"]))
+
+    def test_conectores_sin_reintento(self):
+        self.comprobar_corte("conectores")
+
+    def test_mcp_pendiente_sin_reintento(self):
+        self.comprobar_corte("mcp_pendiente")
+
+    def test_herramienta_tarde_sin_reintento(self):
+        self.comprobar_corte("herramienta_tarde")
+
+    def test_sin_init_sin_reintento(self):
+        self.comprobar_corte("sin_init")
+
+
 if __name__ == "__main__":
     unittest.main()

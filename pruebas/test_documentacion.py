@@ -55,7 +55,7 @@ class PruebaDocumentacion(unittest.TestCase):
     def test_verificacion_manual(self):
         texto = (RAIZ_REPO / "docs" / "verificacion-manual.md").read_text(encoding="utf-8")
         for tema in ("--restricted", "--permission-prompts none", "auth status", "--version", "Aprobar",
-                     r"Orquestador-Cowork\demo", "openspec.cmd validate orquestador-v1 --strict"):
+                     r"Orquestador-Cowork\demo", "openspec.cmd validate operacion-v1 --strict"):
             self.assertIn(tema, texto)
         self.assertIsNone(re.search(r"(?<![\w.\\/-])openspec\s", texto), "usa openspec.cmd, no openspec")
 
@@ -91,6 +91,21 @@ class PruebaOrqEstado(PruebaOrq):
         self.assertRegex(texto, r"T-3\s+bloqueada")
         self.assertNotRegex(texto, r"T-1\s+hecha")  # las terminadas solo se cuentan
         self.assertIn("Carpeta de Cowork:", texto)
+
+
+
+
+class PruebaConectoresDocumentados(unittest.TestCase):
+    def test_paso_siete_cinco_capas_y_campos(self):
+        texto = (RAIZ_REPO / "docs" / "verificacion-manual.md").read_text(encoding="utf-8")
+        paso = texto.split("## 7. Conectores de claude.ai", 1)[1]
+        for capa in ("ENABLE_CLAUDEAI_MCP_SERVERS", "disableClaudeAiConnectors", "--disallowedTools",
+                     "permissions.deny", "--strict-mcp-config", "tools", "mcp_servers", "ConvertFrom-Json",
+                     "utilization"):
+            self.assertIn(capa, paso)
+        for letra in "abcdefgh":
+            self.assertIn(f"### ({letra})", paso)
+        self.assertIn("openspec.cmd validate operacion-v1 --strict", texto)
 
 
 if __name__ == "__main__":

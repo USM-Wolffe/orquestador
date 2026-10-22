@@ -515,7 +515,7 @@ class Orquestador:
         clase = (resultado.error or {}).get("clase", "agente")
         if clase == "limite_uso":
             return Desenlace("limite", (resultado.error or {}).get("mensaje"), resultado)
-        if clase in ("timeout", "cancelada"):
+        if clase in ("timeout", "cancelada", "seguridad"):
             return Desenlace(clase, (resultado.error or {}).get("mensaje"), resultado)
         return Desenlace("error", (resultado.error or {}).get("mensaje"), resultado)
 

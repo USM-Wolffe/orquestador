@@ -79,6 +79,121 @@ Revísalo así:
 ## 6. Cierre
 
     py -3.12 -m unittest discover -s pruebas
-    openspec.cmd validate orquestador-v1 --strict
+    openspec.cmd validate operacion-v1 --strict
 
 Anota en el gate cualquier diferencia con lo esperado: texto exacto, versión de `claude` y hora.
+
+## 7. Conectores de claude.ai
+
+Lo corre Sebastian (tarea 1.5). Anota versión, hora, comando, `tools` y `mcp_servers` de cada intento,
+y qué capa basta sola. Todos los prompts son `Responde solo: hola`; no se pide usar herramientas.
+Cierra otras sesiones de prueba. Conserva el valor anterior de la variable y restáuralo al terminar.
+El perfil mínimo de las pruebas aisladas no reemplaza el perfil de seguridad del adaptador.
+
+Preparación y lectura de NDJSON (cada línea se convierte por separado):
+
+```powershell
+$anteriorMcp = $env:ENABLE_CLAUDEAI_MCP_SERVERS
+Remove-Item Env:ENABLE_CLAUDEAI_MCP_SERVERS -ErrorAction SilentlyContinue
+$base = @('-p', '--output-format', 'stream-json', '--verbose', '--permission-mode', 'dontAsk', '--permission-prompts', 'none', '--restricted', '--tools', 'Read')
+function Ver-Inicio {
+    process {
+        $evento = $_ | ConvertFrom-Json
+        if ($evento.type -eq 'system' -and $evento.subtype -eq 'init') {
+            $evento | Select-Object tools, mcp_servers | ConvertTo-Json -Depth 8
+        }
+        if ($evento.type -eq 'rate_limit_event') {
+            $evento.rate_limit_info | Select-Object status, utilization, resetsAt | ConvertTo-Json
+        }
+    }
+}
+```
+
+### (a) Comando del hallazgo (paso 2)
+
+```powershell
+'Responde solo: hola' | & $claude @base | Ver-Inicio
+```
+
+Anota incluso herramientas propias como `EndConversation`. El resultado establece la comparación de (b) a (e).
+
+### (b) Solo `--strict-mcp-config`
+
+```powershell
+'Responde solo: hola' | & $claude @base --strict-mcp-config | Ver-Inicio
+```
+
+### (c) Solo variable de entorno
+
+```powershell
+$env:ENABLE_CLAUDEAI_MCP_SERVERS = 'false'
+'Responde solo: hola' | & $claude @base | Ver-Inicio
+Remove-Item Env:ENABLE_CLAUDEAI_MCP_SERVERS
+```
+
+### (d) Solo `disableClaudeAiConnectors` desde `--settings`
+
+```powershell
+[IO.File]::WriteAllText("$prueba\solo-conectores.json", '{"disableClaudeAiConnectors":true}')
+'Responde solo: hola' | & $claude @base --settings "$prueba\solo-conectores.json" | Ver-Inicio
+```
+
+### (e) Solo `--disallowedTools mcp__*`
+
+```powershell
+'Responde solo: hola' | & $claude @base --disallowedTools 'mcp__*' | Ver-Inicio
+```
+
+Comprueba además la quinta capa, `permissions.deny`, sola:
+
+```powershell
+[IO.File]::WriteAllText("$prueba\solo-deny.json", '{"permissions":{"deny":["mcp__*"]}}')
+'Responde solo: hola' | & $claude @base --settings "$prueba\solo-deny.json" | Ver-Inicio
+```
+
+### (f) Comando completo del adaptador
+
+Desde el repo, genera el mismo perfil que usa el adaptador para el proyecto sintético `demo`:
+
+```powershell
+py -3.12 -c "from orquestador.config import cargar_config; from orquestador.proyectos import cargar_proyectos; from orquestador.adaptadores.cc import perfil; import json, pathlib, sys; c=cargar_config(); p=next(p for p in cargar_proyectos(c) if p.nombre=='demo'); pathlib.Path(sys.argv[1]).write_text(json.dumps(perfil(c,p,False)),encoding='utf-8')" "$prueba\perfil-completo.json"
+$env:ENABLE_CLAUDEAI_MCP_SERVERS = 'false'
+$env:CLAUDE_CODE_SUBPROCESS_ENV_SCRUB = '1'
+$env:DISABLE_AUTOUPDATER = '1'
+$sesion = [guid]::NewGuid().ToString()
+'Responde solo: hola' | & $claude -p --output-format stream-json --verbose --permission-mode dontAsk --permission-prompts none --restricted --tools 'Read,Edit,Write,Glob,Grep,Bash,TodoWrite,Skill' --settings "$prueba\perfil-completo.json" --strict-mcp-config --disallowedTools 'mcp__*' --session-id $sesion | Ver-Inicio
+```
+
+Si `restricted` está desactivado en la config, reemplaza `--restricted` por `--setting-sources user`.
+Esperado: `mcp_servers` vacío y `tools` solo con las pedidas más las propias verificadas. Llena
+`HERRAMIENTAS_TOLERADAS` en `cc.py` con versión y fecha por nombre; nunca toleres un nombre `mcp__`.
+Hasta completar esa verificación, una herramienta propia desconocida detiene la tarea por seguridad.
+La vigilancia de `tool_use` detecta: no garantiza que la llamada no haya empezado.
+
+### (g) Tarea real por el orquestador
+
+Con `orq.py correr` activo y el proyecto sintético `demo`, crea una tarea con prompt `Responde solo: hola`
+por la entrada de Cowork como en el paso 4 (id nuevo). Revisa sus eventos:
+
+```powershell
+Get-Content "$env:USERPROFILE\.orquestador\proyectos\demo\eventos\eventos.jsonl" -Encoding utf8 | ForEach-Object {
+    $evento = $_ | ConvertFrom-Json
+    if ($evento.tipo -in @('inicio', 'error', 'fin')) { $evento | ConvertTo-Json -Depth 8 }
+}
+```
+
+Esperado: llega a `fin` con `ok: true`, sin error de clase `seguridad`, y el `inicio` no contiene ningún `mcp__`.
+
+### (h) Escala de `utilization`
+
+Los comandos anteriores imprimen también cada `rate_limit_event`. Anota valor crudo de `utilization`,
+`status`, `resetsAt`, hora y ventana si se informa; contrasta con el uso visible del plan. Si no llega,
+anota «sin dato»; no estimes la escala ni un porcentaje. No se implementa aquí el uso del plan (parte B).
+
+```powershell
+if ($null -eq $anteriorMcp) {
+    Remove-Item Env:ENABLE_CLAUDEAI_MCP_SERVERS -ErrorAction SilentlyContinue
+} else {
+    $env:ENABLE_CLAUDEAI_MCP_SERVERS = $anteriorMcp
+}
+```

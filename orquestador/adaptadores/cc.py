@@ -14,6 +14,7 @@ from ..eventos import ruta_para_evento
 from .base import (IGNORADO, ContextoLanzamiento, EstadoLectura, Lanzamiento, Limite, Resultado)
 
 HERRAMIENTAS_BASE = ("Read", "Edit", "Write", "Glob", "Grep", "Bash", "TodoWrite", "Skill")
+HERRAMIENTAS_TOLERADAS = {}  # nombre → {version, fecha}; Sebastian completa en el paso 7.
 HERRAMIENTAS_RED = ("WebFetch", "WebSearch")
 COMANDOS = frozenset({"Bash", "PowerShell"})
 EDICION = {"Edit": "editar", "MultiEdit": "editar", "NotebookEdit": "editar", "Write": "escribir"}
@@ -52,7 +53,7 @@ def regla_ruta(ruta: Path) -> str:
 
 
 def denegaciones(config, proyecto, red: bool) -> list[str]:
-    reglas = []
+    reglas = ["mcp__*"]
     for herramienta in ("Bash", "PowerShell"):
         for cmd in GIT_PROHIBIDO:
             reglas += [f"{herramienta}(git {cmd})", f"{herramienta}(git {cmd} *)"]
@@ -76,7 +77,7 @@ def perfil(config, proyecto, red: bool) -> dict:
         permitir.append("WebSearch")
     return {"permissions": {"defaultMode": "dontAsk", "allow": permitir, "deny": denegaciones(config, proyecto, red),
                             "disableBypassPermissionsMode": "disable"},
-            "disableAllHooks": True}
+            "disableAllHooks": True, "disableClaudeAiConnectors": True}
 
 
 def _hora_desde_texto(texto: str, ahora: dt.datetime) -> str | None:
@@ -107,6 +108,7 @@ class AdaptadorCC:
     nombre = "cc"
     version_minima = "2.1.302"
     version_verificada = "2.1.306"
+    entorno_obligatorio = {"ENABLE_CLAUDEAI_MCP_SERVERS": "false"}  # lo exige seguridad.CAPAS_OBLIGATORIAS
     banderas_prohibidas = ("--dangerously-skip-permissions", "--allow-dangerously-skip-permissions")
     valores_prohibidos = {"--permission-mode": ("bypassPermissions", "auto")}
 
@@ -122,13 +124,14 @@ class AdaptadorCC:
         argv = [*self.agente.ejecutable, "-p", "--output-format", "stream-json", "--verbose",
                 "--permission-mode", "dontAsk", "--permission-prompts", "none"]
         argv += ["--restricted"] if self.agente.restricted else ["--setting-sources", "user"]
-        argv += ["--tools", ",".join(herramientas(red)), "--settings", str(ruta_perfil), "--strict-mcp-config"]
+        argv += ["--tools", ",".join(herramientas(red)), "--settings", str(ruta_perfil), "--strict-mcp-config", "--disallowedTools", "mcp__*"]
         argv += ["--resume", ctx.sesion] if ctx.retomar else ["--session-id", ctx.sesion]
         env = dict(ctx.entorno)
         env.pop("CLAUDE_CODE_EFFORT_LEVEL", None)  # tiene precedencia sobre --effort (doc model-config)
         env["CLAUDE_CODE_SUBPROCESS_ENV_SCRUB"] = "1"
         env["DISABLE_AUTOUPDATER"] = "1"
-        return Lanzamiento(argv=argv, env=env, cwd=ctx.worktree, stdin=ctx.prompt,
+        env.update(self.entorno_obligatorio)
+        return Lanzamiento(herramientas_esperadas=tuple(herramientas(red)) + tuple(HERRAMIENTAS_TOLERADAS), argv=argv, env=env, cwd=ctx.worktree, stdin=ctx.prompt,
                            archivos={ruta_perfil: a_json(perfil(ctx.config, ctx.proyecto, red))})
 
     # --- lectura ---
@@ -153,7 +156,13 @@ class AdaptadorCC:
             if subtipo == "init":
                 estado.sesion = linea.get("session_id") or estado.sesion
                 estado.modelo = linea.get("model")
-                return [("inicio", {"sesion": estado.sesion, "modelo": estado.modelo, "retomada": estado.retomada})]
+                tools, mcp = linea.get("tools"), linea.get("mcp_servers")
+                validas = (isinstance(tools, list) and all(isinstance(x, str) for x in tools)
+                           and isinstance(mcp, list) and all(isinstance(x, dict) and isinstance(x.get("name"), str) for x in mcp))
+                return [("inicio", {"sesion": estado.sesion, "modelo": estado.modelo, "retomada": estado.retomada,
+                                    "herramientas": tools[:40] if validas else None,
+                                    "herramientas_omitidas": max(0, len(tools)-40) if validas else 0,
+                                    "mcp": [x["name"] for x in mcp] if validas else None})]
             return []  # api_retry, hooks, etc.: conocidos, sin evento propio
         if tipo == "assistant":
             if linea.get("error") == "rate_limit":
