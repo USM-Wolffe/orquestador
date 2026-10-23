@@ -52,10 +52,17 @@ Requisitos: Windows 11, Python 3.12 (`py -3.12`), git y Claude Code. Solo librer
 
 ## Arranque
 
-    py -3.12 .\orq.py correr
+    py -3.12 .\orq.py correr --abrir
 
-La terminal muestra el enlace del tablero (`http://127.0.0.1:8765/entrar?t=…`). Sirve una sola vez: ábrelo en el
-navegador y queda una sesión que dura hasta reiniciar `orq correr`. Opciones:
+Eso abre el navegador ya con la sesión. Sin `--abrir`, la terminal muestra el enlace del tablero
+(`http://127.0.0.1:8765/entrar?t=…`). Sirve una sola vez y vence a los 5 minutos: ábrelo en el navegador y queda
+una sesión (cookie sin vencimiento propio) que dura hasta reiniciar `orq correr` o hasta que la cierres.
+Mientras corre, pulsar **Enter** en esa ventana abre el navegador con un enlace nuevo (el anterior sin canjear
+deja de servir), y escribir `x` y pulsar Enter cierra todas las sesiones.
+Con el orquestador corriendo, `py -3.12 .\orq.py abrir` abre el tablero sin token: si el navegador pide entrar,
+pulsa Enter en la ventana del orquestador.
+El tablero nuevo muestra "Te toca decidir", "Ahora mismo" y "El plan". Opciones:
+- `--abrir`: abre el navegador con el enlace inicial (no se combina con `--sin-tablero`).
 - `--sin-tablero`: solo el bucle, sin abrir ningún puerto.
 - `--una-vez`: procesa un ciclo y termina.
 - `--permitir-codigo-modificado`: deja usar los gates aunque `orquestador\` u `orq.py` tengan cambios sin commit
@@ -70,9 +77,11 @@ Cowork deja solicitudes en `entrada\`, lee los acuses en `respuestas\` y el esta
 
 ## Aprobar un gate
 
-1. Abre la tarea en `esperando_gate` desde el tablero: revisa el diff stat, el informe y la huella corta.
-2. Pulsa **Aprobar** (o **Rechazar con nota**). La terminal de `orq correr` muestra un código de 6 dígitos.
-3. Escribe el código en el tablero y pulsa **Confirmar** antes de 120 segundos.
+1. En "Te toca decidir" pulsa **Revisar y decidir** en la tarea que espera: el panel muestra qué se aprueba, lo
+   que dice la revisión, qué cambió y la bitácora en frases. Los datos técnicos quedan en "Detalles técnicos".
+2. Pulsa **Aprobar** (o **Rechazar con nota** en el panel). La terminal de `orq correr` muestra un código de 6 dígitos.
+3. Escribe el código en el tablero y pulsa **Confirmar aprobación** antes de 120 segundos. El panel se cierra con
+   Escape, la × o un clic fuera.
 
 Si el worktree cambia después de revisar, la decisión se rechaza ("el estado cambió, vuelve a revisar"). Tres
 códigos erróneos bloquean los gates hasta reiniciar `orq correr`. El commit lo sigues haciendo tú.
@@ -80,6 +89,7 @@ códigos erróneos bloquean los gates hasta reiniciar `orq correr`. El commit lo
 ## Otros comandos
 
     py -3.12 .\orq.py estado
+    py -3.12 .\orq.py abrir
     py -3.12 .\orq.py tarea demo T-1 reintentar
     py -3.12 .\orq.py tarea demo T-1 cancelar
     py -3.12 .\orq.py proyecto lista

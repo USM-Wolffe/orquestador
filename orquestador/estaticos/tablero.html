@@ -1,0 +1,85 @@
+<!doctype html>
+<html lang="es-CL">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Orquestador</title>
+<link rel="stylesheet" href="/static/app.css">
+<script src="/static/app.js" defer></script>
+</head>
+<body data-pagina="tablero">
+<header class="barra">
+  <h1>Orquestador</h1>
+  <select id="f-proyecto" class="proyecto" aria-label="Proyecto"></select>
+  <div class="vivo"><span class="pulso" aria-hidden="true"></span><span id="vivo">Funcionando</span></div>
+</header>
+<p id="aviso" class="aviso" hidden></p>
+<main>
+  <section class="turno" aria-labelledby="t-turno">
+    <h2 id="t-turno">Te toca decidir</h2>
+    <p class="sub" id="turno-sub"></p>
+    <div id="turno"></div>
+  </section>
+  <section aria-labelledby="t-ahora">
+    <h2 id="t-ahora">Ahora mismo</h2>
+    <p class="sub">Qué hace cada agente en este momento y cuánto le queda de su plan hoy. <a href="/consumo">Ver el consumo</a></p>
+    <div class="equipo" id="agentes"></div>
+  </section>
+  <section aria-labelledby="t-plan">
+    <h2 id="t-plan">El plan</h2>
+    <p class="sub">Cada línea es un cambio. Las tareas avanzan de izquierda a derecha y cada una espera a la anterior. El color dice quién la hace.</p>
+    <div class="plan">
+      <div id="plan"></div>
+      <div class="leyenda" aria-label="Qué significa cada punto">
+        <span><i class="ley-hecha"></i>Hecha</span>
+        <span><i class="ley-trabajando"></i>Trabajando</span>
+        <span><i class="ley-espera"></i>Te espera</span>
+        <span><i class="ley-bloqueada"></i>Bloqueada</span>
+        <span><i class="ley-fallida"></i>Falló</span>
+      </div>
+    </div>
+  </section>
+</main>
+<div class="velo" id="velo" aria-hidden="true">
+  <aside class="panel" role="dialog" aria-modal="true" aria-labelledby="d-titulo">
+    <button class="cerrar" id="cerrar" aria-label="Cerrar">×</button>
+    <h2 id="d-titulo">Tarea</h2>
+    <p class="sub" id="d-sub"></p>
+    <section>
+      <h4>Qué se aprueba</h4>
+      <p id="d-explicacion"></p>
+    </section>
+    <section>
+      <h4>Lo que dice la revisión</h4>
+      <p id="d-revision"></p>
+    </section>
+    <section>
+      <h4>Qué cambió</h4>
+      <table class="archivos"><tbody id="d-diff"></tbody></table>
+      <p id="d-diff-vacio" hidden>diff no disponible</p>
+    </section>
+    <section>
+      <h4>Qué fue haciendo</h4>
+      <ol class="bitacora" id="d-bitacora"></ol>
+    </section>
+    <section id="gate" hidden></section>
+    <section>
+      <details id="d-tecnicos">
+        <summary>Detalles técnicos</summary>
+        <h4>Campos</h4>
+        <dl id="campos"></dl>
+        <h4>Niveles de garantía</h4>
+        <dl id="niveles"></dl>
+        <h4>Resultado</h4>
+        <pre id="informe"></pre>
+        <dl id="resultado"></dl>
+        <h4>Consumo</h4>
+        <dl id="consumo"></dl>
+        <h4>Historial</h4>
+        <ol id="historial"></ol>
+      </details>
+    </section>
+  </aside>
+</div>
+</body>
+</html>

@@ -199,6 +199,25 @@ class PruebaEventosDeSeguridad(BasePlanificador):
 
 
 
+class PruebaUsoPlanGuardado(BasePlanificador):
+    def test_uso_plan_queda_en_agentes_json(self):
+        self.instalar()
+        orq = self.orquestador()
+        self.pedir(orq, {"id": "T-1", "prompt": "#guion: uso_plan"})
+        self.esperar(orq, lambda: self.tarea(orq, "T-1")["estado"] == "hecha", timeout=60)
+        datos = json.loads((self.raiz / "agentes.json").read_text(encoding="utf-8"))
+        self.assertEqual(datos["cc"]["uso_plan"]["uso"], 0.62)
+        self.assertIsNotNone(datos["cc"]["uso_plan"]["visto_en"])
+
+    def test_sin_uso_plan_queda_null(self):
+        self.instalar()
+        orq = self.orquestador()
+        self.pedir(orq, {"id": "T-1", "prompt": "#guion: ok"})
+        self.esperar(orq, lambda: self.tarea(orq, "T-1")["estado"] == "hecha", timeout=60)
+        datos = json.loads((self.raiz / "agentes.json").read_text(encoding="utf-8"))
+        self.assertIsNone(datos["cc"].get("uso_plan"))
+
+
 class PruebaCorteOperacion(BasePlanificador):
     def comprobar_corte(self, guion):
         from orquestador import procesos

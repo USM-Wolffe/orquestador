@@ -176,6 +176,13 @@ class ProcesadorEntrada:
         if errores:
             raise SolicitudInvalida("; ".join(errores))
         for t in nuevas.values():
+            revisa = t.get("revisa")
+            if revisa is not None:
+                objetivo = nuevas.get(revisa) or self.registro.obtener(revisa)
+                if objetivo is None:
+                    raise SolicitudInvalida(f"{t['id']} revisa una tarea que no existe: {revisa}")
+                if objetivo.get("cambio") != t.get("cambio"):
+                    raise SolicitudInvalida(f"{t['id']} revisa una tarea de otro cambio: {revisa}")
             for dep in t["dependencias"]:
                 if dep not in nuevas and not self.registro.existe(dep):
                     raise SolicitudInvalida(f"{t['id']} depende de una tarea que no existe: {dep}")
@@ -210,6 +217,12 @@ class ProcesadorEntrada:
             raise SolicitudInvalida(f"no se puede editar una tarea {tarea['estado']}")
         combinado = {**campos_cowork(tarea), **cambios}
         validada = construir_tarea(combinado, self.proyecto, self.config.agentes, tarea["creada"])
+        if validada.get("revisa") is not None:
+            objetivo = self.registro.obtener(validada["revisa"])
+            if objetivo is None:
+                raise SolicitudInvalida(f"{tarea['id']} revisa una tarea que no existe: {validada['revisa']}")
+            if objetivo.get("cambio") != validada.get("cambio"):
+                raise SolicitudInvalida(f"{tarea['id']} revisa una tarea de otro cambio: {validada['revisa']}")
         for dep in validada["dependencias"]:
             if not self.registro.existe(dep):
                 raise SolicitudInvalida(f"{tarea['id']} depende de una tarea que no existe: {dep}")

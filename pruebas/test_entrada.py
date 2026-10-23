@@ -142,6 +142,47 @@ class PruebaCrear(BaseEntrada):
         self.assertTrue(all(a["ok"] for a in acuses))
 
 
+class PruebaExplicacionYRevisa(BaseEntrada):
+    def test_explicacion_valida_se_guarda(self):
+        self.dejar("01.json", {"op": "crear", "tareas": [self.tarea("T-1", explicacion="Que cc pueda recibir tareas.")]})
+        self.procesador.procesar()
+        self.assertTrue(self.acuse("01.json")["ok"], self.acuse("01.json"))
+        self.assertEqual(self.guardado("T-1")["explicacion"], "Que cc pueda recibir tareas.")
+
+    def test_explicacion_invalida(self):
+        for i, explicacion in enumerate(("x" * 301, "con\nsalto", "con\x01control", "con\ttabulador")):
+            with self.subTest(explicacion=repr(explicacion[:20])):
+                self.dejar(f"0{i}.json", {"op": "crear", "tareas": [self.tarea(f"T-{i}", explicacion=explicacion)]})
+                self.procesador.procesar()
+                self.assertFalse(self.acuse(f"0{i}.json")["ok"])
+        self.assertEqual(self.reg.lista(), [])
+
+    def test_revision_valida_agrega_dependencia(self):
+        self.dejar("01.json", {"op": "crear", "tareas": [self.tarea("T-1"),
+                                                         self.tarea("T-1r", revisa="T-1")]})
+        self.procesador.procesar()
+        self.assertTrue(self.acuse("01.json")["ok"], self.acuse("01.json"))
+        t = self.guardado("T-1r")
+        self.assertEqual(t["revisa"], "T-1")
+        self.assertIn("T-1", t["dependencias"])
+        self.assertEqual(t["estado"], "bloqueada")
+
+    def test_revision_de_otro_cambio(self):
+        self.dejar("01.json", {"op": "crear", "tareas": [self.tarea("T-1", cambio="login"),
+                                                         self.tarea("T-1r", cambio="otro", revisa="T-1")]})
+        self.procesador.procesar()
+        self.assertFalse(self.acuse("01.json")["ok"])
+        self.assertEqual(self.reg.lista(), [])
+
+    def test_revision_inexistente_y_a_si_misma(self):
+        self.dejar("01.json", {"op": "crear", "tareas": [self.tarea("T-1", revisa="T-99")]})
+        self.dejar("02.json", {"op": "crear", "tareas": [self.tarea("T-2", revisa="T-2")]})
+        self.procesador.procesar()
+        self.assertFalse(self.acuse("01.json")["ok"])
+        self.assertFalse(self.acuse("02.json")["ok"])
+        self.assertEqual(self.reg.lista(), [])
+
+
 class PruebaEditarCancelarReintentar(BaseEntrada):
     def crear(self, *tareas):
         self.dejar("00-crear.json", {"op": "crear", "tareas": list(tareas)})

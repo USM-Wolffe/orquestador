@@ -4,8 +4,9 @@ Uso:
   py -3.12 orq.py [--config RUTA] [--raiz RUTA] <subcomando> ...
 
 Subcomandos:
-  correr        bucle del orquestador con el tablero: orq correr [--sin-tablero] [--una-vez]
+  correr        bucle del orquestador con el tablero: orq correr [--abrir] [--sin-tablero] [--una-vez]
                 [--permitir-codigo-modificado]
+  abrir         abre el tablero en el navegador sin token: orq abrir
   tarea         pide reintentar o cancelar una tarea: orq tarea <proyecto> <id> reintentar|cancelar
   proyecto      orq proyecto nuevo <nombre> --repo <ruta> [--base main] | orq proyecto lista
   estado        resumen del estado (solo lee)
@@ -24,12 +25,24 @@ from orquestador.config import ErrorConfig, cargar_config
 
 
 def _correr(args) -> int:
-    from orquestador import integridad
+    import webbrowser
+
+    from orquestador import acceso, integridad
+    from orquestador.candado import CandadoOcupado
     from orquestador.inicio import iniciar
     from orquestador.planificador import Orquestador
     from orquestador.tablero import ErrorTablero, Tablero
 
-    contexto = iniciar(args.config, args.raiz)
+    if args.abrir and args.sin_tablero:
+        print("error: las opciones --abrir y --sin-tablero no se combinan", file=sys.stderr)
+        return 1
+    try:
+        contexto = iniciar(args.config, args.raiz)
+    except CandadoOcupado:
+        if args.abrir:
+            # Segunda instancia con --abrir: hace lo de `orq abrir` y termina con 1 (design D9).
+            acceso.abrir_desde_candado(cargar_config(args.config, args.raiz))
+        raise
     tablero = None
     try:
         print(f"Proyectos activos: {', '.join(p.nombre for p in contexto.activos) or 'ninguno'}", flush=True)
@@ -38,10 +51,14 @@ def _correr(args) -> int:
         if not args.sin_tablero:
             tablero = Tablero(orq, contexto.config.puerto)
             try:
-                tablero.iniciar()
+                enlace = tablero.iniciar()
             except ErrorTablero as e:
                 print(f"error: {e}", file=sys.stderr)
                 return 1
+            contexto.candado.fijar_puerto(tablero.puerto)
+            if args.abrir:
+                webbrowser.open(enlace)
+            acceso.iniciar_escucha(tablero)
         try:
             orq.correr(una_vez=args.una_vez)
         except KeyboardInterrupt:
@@ -51,6 +68,12 @@ def _correr(args) -> int:
         if tablero:
             tablero.detener()
         contexto.cerrar()
+
+
+def _abrir(args) -> int:
+    from orquestador import acceso
+
+    return acceso.abrir_desde_candado(cargar_config(args.config, args.raiz))
 
 
 def _estado(args) -> int:
@@ -105,6 +128,7 @@ def construir_parser() -> argparse.ArgumentParser:
 
     p_correr = sub.add_parser("correr", help="corre el bucle del orquestador y el tablero")
     p_correr.add_argument("--una-vez", action="store_true", help="procesa un ciclo y termina")
+    p_correr.add_argument("--abrir", action="store_true", help="abre el navegador con el enlace inicial")
     p_correr.add_argument("--sin-tablero", action="store_true", help="no levanta el tablero")
     p_correr.add_argument("--permitir-codigo-modificado", action="store_true",
                           help="permite decidir gates aunque el código del orquestador tenga cambios sin commit")
@@ -126,6 +150,7 @@ def construir_parser() -> argparse.ArgumentParser:
     p_proyecto.set_defaults(funcion=_proyecto)
 
     sub.add_parser("estado", help="resumen del estado (solo lee)").set_defaults(funcion=_estado)
+    sub.add_parser("abrir", help="abre el tablero en el navegador (sin token)").set_defaults(funcion=_abrir)
 
     p_importar = sub.add_parser("importar-v0", help="importa sesiones y trabajos del puente v0 (simula por defecto)")
     p_importar.add_argument("--desde", required=True, help="carpeta del puente v0 (no se modifica)")

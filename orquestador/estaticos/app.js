@@ -15,7 +15,7 @@ async function api(ruta) {
   const r = await fetch(ruta, { credentials: "same-origin" });
   if (r.status === 401) {
     document.querySelector("main").replaceChildren(
-      el("p", "Sin sesión: abre el enlace que muestra la terminal de orq correr.", "aviso"));
+      el("p", "Sin sesión: pulsa Enter en la ventana del orquestador para entrar.", "aviso"));
     throw new Error("sin sesión");
   }
   return r.json();
@@ -37,91 +37,80 @@ function duracion(segundos) {
   return `${Math.floor(segundos / 3600)} h ${Math.floor((segundos % 3600) / 60)} min`;
 }
 
-function llenarSelect(select, valores) {
+function hace(ts) {
+  if (!ts) return "";
+  const segundos = Math.max(0, Math.round((Date.now() - Date.parse(ts)) / 1000));
+  if (segundos < 60) return `hace ${segundos} s`;
+  if (segundos < 3600) return `hace ${Math.floor(segundos / 60)} min`;
+  return `hace ${Math.floor(segundos / 3600)} h`;
+}
+
+function claseAgente(agente) {
+  return { cc: "ag-cc", codex: "ag-codex", cursor: "ag-cursor" }[agente] || "ag-otro";
+}
+
+function llenarSelect(select, valores, conservar) {
+  const actual = conservar ? select.value : "";
+  select.replaceChildren();
   for (const v of valores) {
     const o = el("option", v);
     o.value = v;
     select.append(o);
   }
+  if (actual && valores.includes(actual)) select.value = actual;
 }
 
 function lista(dl, pares) {
   dl.replaceChildren();
   for (const [clave, valor] of pares) {
-    dl.append(el("dt", clave), el("dd", valor === null || valor === undefined ? "—" : valor));
+    dl.append(el("dt", clave), el("dd", valor === null || valor === undefined || valor === "" ? "—" : valor));
   }
 }
 
-// --- kanban ---
+const VEREDICTOS = { sin_reparos: "sin reparos", con_reparos: "con reparos", no_concluyente: "no concluyente" };
 
-function tarjeta(c) {
-  const a = el("a", null, "tarjeta");
-  a.href = `/detalle?p=${encodeURIComponent(c.proyecto)}&id=${encodeURIComponent(c.id)}`;
-  a.append(el("strong", c.id), el("span", c.titulo, "titulo"),
-    el("small", `${c.proyecto} · ${c.cambio} · ${c.agente}`),
-    el("small", `intentos ${c.intentos}/${c.max_intentos} · ${duracion(c.segundos_en_estado)} en este estado`));
-  if (c.plan_agotado_hasta) a.append(el("small", `${c.agente}: plan agotado hasta ${c.plan_agotado_hasta}`, "aviso"));
-  else if (c.motivo) a.append(el("small", c.motivo, "motivo"));
-  if (c.gate && c.gate.huella_corta && c.estado === "esperando_gate") a.append(el("small", `huella ${c.gate.huella_corta}`));
-  return a;
-}
+// --- panel lateral ---
 
-async function kanban() {
-  const s = await sesion();
-  llenarSelect($("#f-proyecto"), s.proyectos);
-  llenarSelect($("#f-agente"), s.agentes);
-  async function pintar() {
-    const q = new URLSearchParams();
-    if ($("#f-proyecto").value) q.set("proyecto", $("#f-proyecto").value);
-    if ($("#f-agente").value) q.set("agente", $("#f-agente").value);
-    const d = await api(`/api/tareas?${q}`);
-    const columnas = [];
-    for (const estado of d.estados) {
-      const col = el("section", null, "columna");
-      col.append(el("h2", estado));
-      for (const c of d.tarjetas.filter((x) => x.estado === estado)) col.append(tarjeta(c));
-      columnas.push(col);
-    }
-    $("#kanban").replaceChildren(...columnas);
-  }
-  $("#f-proyecto").onchange = pintar;
-  $("#f-agente").onchange = pintar;
-  await pintar();
-  setInterval(pintar, 3000);
-}
+let panel = null; // {proyecto, id, detalle, eventos, huella}
 
-// --- detalle ---
-
-function lineaEvento(e) {
-  const d = e.datos || {};
-  let texto;
-  if (e.tipo === "archivo") texto = `${d.accion} ${d.ruta}`;
-  else if (e.tipo === "comando") texto = `$ ${d.comando} (${d.estado || ""})`;
-  else if (e.tipo === "herramienta") texto = `${d.nombre} ${d.objetivo || ""} (${d.estado || ""})`;
-  else if (e.tipo === "mensaje") texto = d.texto;
-  else if (e.tipo === "error") texto = `${d.clase}: ${d.mensaje || ""}`;
-  else texto = JSON.stringify(d);
-  return el("li", `${e.ts} · ${e.tipo} · ${texto}`);
+function cerrarPanel() {
+  if (!panel) return;
+  clearInterval(panel.detalle);
+  clearInterval(panel.eventos);
+  panel = null;
+  const velo = $("#velo");
+  velo.classList.remove("abierto");
+  velo.setAttribute("aria-hidden", "true");
 }
 
 function panelGate(d, s, p, id) {
   const caja = $("#gate");
-  if (d.estado !== "esperando_gate") { caja.hidden = true; caja.replaceChildren(); return; }
+  caja.replaceChildren();
+  if (d.estado !== "esperando_gate") { caja.hidden = true; return; }
   caja.hidden = false;
+  caja.className = "gate";
   const nota = el("textarea");
   nota.placeholder = "Nota (obligatoria para rechazar)";
-  const aprobar = el("button", "Aprobar");
-  const rechazar = el("button", "Rechazar con nota");
+  const aprobar = el("button", "Aprobar", "btn btn-turno");
+  const rechazar = el("button", "Rechazar con nota", "btn btn-sec");
+  const cajaCodigo = el("div", null, "codigo");
+  cajaCodigo.hidden = true;
+  const etiqueta = el("label", "Escribe el código que apareció en la ventana del orquestador.");
+  etiqueta.htmlFor = "cod";
   const codigo = el("input");
+  codigo.id = "cod";
   codigo.inputMode = "numeric";
   codigo.maxLength = 6;
-  codigo.placeholder = "Código de 6 dígitos de la terminal";
-  codigo.hidden = true;
-  const confirmar = el("button", "Confirmar");
-  confirmar.hidden = true;
+  codigo.placeholder = "······";
+  const confirmar = el("button", "Confirmar aprobación", "btn btn-turno");
+  const fila = el("div", null, "acciones");
+  fila.append(codigo, confirmar);
+  cajaCodigo.append(etiqueta, fila);
   const mensaje = el("p", "", "mensaje");
-  caja.replaceChildren(el("h2", "Gate"), el("p", `Huella del estado revisado: ${d.gate.huella_corta}`), nota,
-    aprobar, rechazar, codigo, confirmar, mensaje);
+  const acciones = el("div", null, "acciones");
+  acciones.append(aprobar, rechazar);
+  caja.append(el("h4", "Tu decisión"), el("p", `Huella del estado revisado: ${d.gate.huella_corta}`), nota,
+    acciones, cajaCodigo, mensaje);
   if (s.gates.deshabilitados) {
     aprobar.disabled = rechazar.disabled = true;
     mensaje.textContent = s.gates.deshabilitados;
@@ -141,10 +130,11 @@ function panelGate(d, s, p, id) {
   }
   async function preparar(dec) {
     decision = dec;
+    confirmar.textContent = dec === "aprobar" ? "Confirmar aprobación" : "Confirmar rechazo";
     const [estado, datos] = await enviar("preparar", { decision: dec, huella: d.gate.huella, nota: nota.value || null });
     if (estado === 200) {
       mensaje.textContent = datos.mensaje;
-      codigo.hidden = confirmar.hidden = false;
+      cajaCodigo.hidden = false;
       codigo.value = "";
       codigo.focus();
     } else if (estado === 423) bloquear(datos.error);
@@ -161,66 +151,177 @@ function panelGate(d, s, p, id) {
   };
 }
 
-async function detalle() {
+async function abrirPanel(proyecto, id) {
   const s = await sesion();
-  const q = new URLSearchParams(location.search);
-  const p = q.get("p");
-  const id = q.get("id");
-  const base = `/api/tareas/${encodeURIComponent(p)}/${encodeURIComponent(id)}`;
+  cerrarPanel();
+  const velo = $("#velo");
+  velo.classList.add("abierto");
+  velo.setAttribute("aria-hidden", "false");
+  $("#cerrar").focus();
+  const base = `/api/tareas/${encodeURIComponent(proyecto)}/${encodeURIComponent(id)}`;
   let ultimo = 0;
   let intento = null;
   let huellaMostrada;
   async function pintarDetalle() {
     const d = await api(base);
-    $("#titulo").textContent = `${d.id} · ${d.titulo} (${d.estado})`;
-    lista($("#campos"), [["Proyecto", d.proyecto], ["Estado", d.estado], ["Motivo", d.motivo], ["Agente", d.agente],
-      ["Cambio", d.cambio], ["Rama", d.rama], ["Intentos", `${d.intentos}/${d.max_intentos}`],
-      ["Dependencias", (d.dependencias || []).join(", ")], ["Plan agotado hasta", d.plan_agotado_hasta],
-      ["Prompt", d.prompt]]);
-    lista($("#niveles"), Object.entries(d.niveles || {}));
-    const diff = $("#diff");
-    if (!d.diff_disponible) diff.replaceChildren(el("p", "diff no disponible"));
+    $("#d-titulo").textContent = d.titulo || d.id;
+    $("#d-sub").textContent = `${d.cambio} · ${d.nombre_agente || d.agente} · ${d.estado_texto || ""}`;
+    $("#d-explicacion").textContent = d.explicacion || "Sin explicación de lo que se aprueba.";
+    $("#d-revision").textContent = d.revision
+      ? `${VEREDICTOS[d.revision.veredicto] || d.revision.veredicto}. ${d.revision.resumen || ""}` : "Sin revisión";
+    const diff = $("#d-diff");
+    const vacio = $("#d-diff-vacio");
+    if (!d.diff_disponible) { diff.replaceChildren(); vacio.hidden = false; }
     else {
-      const ul = el("ul");
+      vacio.hidden = true;
+      const filas = [];
       for (const a of d.diffstat.archivos) {
-        ul.append(el("li", `${a.ruta}${a.nuevo ? " (nuevo)" : ""}: +${a.agregadas ?? "?"} −${a.borradas ?? "?"}`));
+        const tr = el("tr");
+        const tdRuta = el("td", `${a.ruta}${a.nuevo ? " (nuevo)" : ""}`);
+        const tdCambio = el("td");
+        const mas = el("span", `+${a.agregadas ?? "?"}`, "mas");
+        const menos = el("span", `−${a.borradas ?? "?"}`, "menos");
+        tdCambio.append(mas, document.createTextNode(" "), menos);
+        tr.append(tdRuta, tdCambio);
+        filas.push(tr);
       }
-      diff.replaceChildren(ul);
+      diff.replaceChildren(...filas);
     }
     $("#informe").textContent = d.informe || "sin informe";
     const r = d.resultado || {};
     lista($("#resultado"), [["Ok", r.ok], ["Error", r.error ? `${r.error.clase}: ${r.error.mensaje}` : null],
       ["Duración (s)", r.duracion_s]]);
+    lista($("#campos"), [["Id", d.id], ["Proyecto", d.proyecto], ["Estado", d.estado], ["Motivo", d.motivo],
+      ["Agente", d.agente], ["Cambio", d.cambio], ["Rama", d.rama], ["Intentos", `${d.intentos}/${d.max_intentos}`],
+      ["Dependencias", (d.dependencias || []).join(", ")], ["Plan agotado hasta", d.plan_agotado_hasta],
+      ["Prompt", d.prompt]]);
+    lista($("#niveles"), Object.entries(d.niveles || {}));
     lista($("#consumo"), Object.entries(d.consumo || {}).map(([a, c]) => [a, JSON.stringify(c)]));
-    const hist = $("#historial");
-    hist.replaceChildren(...d.historial.map((h) => el("li",
+    $("#historial").replaceChildren(...d.historial.map((h) => el("li",
       `${h.en} · ${h.de || "—"} → ${h.a} · ${h.por}${h.via ? " (" + h.via + ")" : ""} · ${h.motivo || ""}`)));
     const clave = `${d.estado}|${d.gate.huella}`;
     if (clave !== huellaMostrada) {
       huellaMostrada = clave;
-      panelGate(d, s, p, id);
+      panelGate(d, s, proyecto, id);
     }
   }
   async function pintarEventos() {
-    const d = await api(`${base}/eventos?desde=${ultimo}`);
-    if (intento !== d.intento) {
-      intento = d.intento;
-      $("#actividad").replaceChildren();
-    }
-    for (const e of d.eventos) $("#actividad").append(lineaEvento(e));
+    const d = await api(`${base}/eventos?desde=0`);
+    intento = d.intento;
     ultimo = d.ultimo;
+    const ahoraLi = (d.frases || []).map((f, i, arr) => {
+      const li = el("li", null, i === arr.length - 1 ? "ahora" : "");
+      li.append(el("time", (f.ts || "").slice(11, 16)), document.createTextNode(f.frase));
+      return li;
+    });
+    $("#d-bitacora").replaceChildren(...ahoraLi);
   }
   await pintarDetalle();
   await pintarEventos();
-  setInterval(pintarEventos, 1500);
-  setInterval(pintarDetalle, 3000);
+  panel = { proyecto, id, detalle: setInterval(pintarDetalle, 3000), eventos: setInterval(pintarEventos, 1500) };
+}
+
+// --- página principal ---
+
+async function tablero() {
+  const s = await sesion();
+  const select = $("#f-proyecto");
+  llenarSelect(select, s.proyectos, false);
+  if (!panel) {
+    $("#cerrar").onclick = cerrarPanel;
+    $("#velo").addEventListener("click", (e) => { if (e.target === $("#velo")) cerrarPanel(); });
+    document.addEventListener("keydown", (e) => { if (e.key === "Escape") cerrarPanel(); });
+  }
+  async function pintar() {
+    const proyecto = select.value || s.proyectos[0] || "";
+    const d = await api(`/api/tablero?proyecto=${encodeURIComponent(proyecto)}`);
+    $("#vivo").textContent = d.momento ? `Funcionando · revisado ${hace(d.momento)}` : "Funcionando";
+    // Te toca decidir
+    const n = d.turno.length;
+    $("#turno-sub").textContent = n === 0 ? "" : (n === 1
+      ? "1 tarea terminó y espera tu aprobación. Nada avanza en ese cambio hasta que decidas."
+      : `${n} tareas terminaron y esperan tu aprobación. Nada avanza en esos cambios hasta que decidas.`);
+    if (!d.turno.length) {
+      $("#turno").replaceChildren(el("p", "Nada que decidir ahora"));
+    } else {
+      const decisiones = d.turno.map((g) => {
+        const caja = el("div", null, "decision");
+        const texto = el("div");
+        texto.append(el("h3", g.titulo));
+        if (g.explicacion) texto.append(el("p", g.explicacion));
+        const evidencia = el("div", null, "evidencia");
+        const archivos = el("span");
+        archivos.append(el("b", g.archivos), document.createTextNode(" archivos cambiados"));
+        evidencia.append(archivos);
+        if (g.pruebas) evidencia.append(el("span", g.pruebas.ok ? "Pruebas en verde" : "Pruebas: fallaron"));
+        const revision = el("span");
+        if (g.revision) {
+          revision.append(document.createTextNode("Revisión: "),
+            el("b", VEREDICTOS[g.revision.veredicto] || g.revision.veredicto));
+        } else revision.textContent = "Sin revisión";
+        evidencia.append(revision);
+        texto.append(evidencia);
+        const boton = el("button", "Revisar y decidir", "btn btn-turno");
+        boton.onclick = () => abrirPanel(g.proyecto || proyecto, g.id);
+        caja.append(texto, boton);
+        return caja;
+      });
+      $("#turno").replaceChildren(...decisiones);
+    }
+    // Ahora mismo
+    const filas = d.agentes.map((a) => {
+      const fila = el("div", null, a.estado === "apagado" ? "agente apagado" : "agente");
+      const quien = el("div", null, "quien");
+      quien.append(el("span", null, `ficha ${claseAgente(a.agente)}`), document.createTextNode(a.nombre));
+      const que = el("div", null, "que");
+      const titulo = a.estado === "trabajando" ? a.tarea : (a.estado === "plan_agotado" ? "Plan agotado" : (a.estado === "apagado" ? "Apagado" : "Disponible"));
+      que.append(el("b", titulo || "Disponible"));
+      const detalle = a.frase ? `${a.frase} · ${hace(a.frase_en)}` : (a.motivo || "");
+      que.append(el("span", detalle));
+      const medidor = el("div", null, "medidor");
+      if (a.plan && a.plan.uso !== null && a.plan.uso !== undefined) {
+        medidor.append(document.createTextNode(
+          `Plan: ${Math.round(a.plan.uso * 100)} % usado · según Claude Code, ${hace(a.plan.visto_en)}`));
+        const meter = document.createElement("meter");
+        meter.min = "0"; meter.max = "1"; meter.value = String(a.plan.uso);
+        medidor.append(meter);
+      } else {
+        medidor.textContent = `${a.hoy.minutos} min de trabajo · ${a.hoy.tareas} tareas hoy`;
+      }
+      fila.append(quien, que, medidor);
+      return fila;
+    });
+    $("#agentes").replaceChildren(...filas);
+    // El plan
+    const lineas = d.plan.map((linea) => {
+      const caja = el("div", null, "linea");
+      const header = el("header");
+      header.append(el("h3", linea.cambio),
+        el("span", `${linea.listas} de ${linea.total} listas${linea.nota ? " · " + linea.nota : ""}`));
+      const via = el("div", null, "via");
+      for (const e of linea.estaciones) {
+        const boton = el("button", null, `estacion ${e.forma} ${claseAgente(e.agente)}`);
+        boton.type = "button";
+        const punto = el("span", e.forma === "hecha" ? "✓" : (e.forma === "espera" ? "!" : ""), "punto");
+        boton.append(punto, el("b", e.titulo), el("small", e.texto));
+        boton.onclick = () => abrirPanel(linea.proyecto || proyecto, e.id);
+        via.append(boton);
+      }
+      caja.append(header, via);
+      return caja;
+    });
+    $("#plan").replaceChildren(...lineas);
+  }
+  select.onchange = pintar;
+  await pintar();
+  setInterval(pintar, 3000);
 }
 
 // --- consumo ---
 
 async function consumo() {
   const s = await sesion();
-  llenarSelect($("#f-proyecto"), s.proyectos);
+  llenarSelect($("#f-proyecto"), ["", ...s.proyectos], false);
   async function pintar() {
     const q = new URLSearchParams();
     for (const [campo, nombre] of [["#f-proyecto", "proyecto"], ["#f-desde", "desde"], ["#f-hasta", "hasta"]]) {
@@ -240,7 +341,7 @@ async function consumo() {
   await pintar();
 }
 
-const PAGINAS = { kanban, detalle, consumo };
+const PAGINAS = { tablero, consumo };
 document.addEventListener("DOMContentLoaded", () => {
   const pagina = PAGINAS[document.body.dataset.pagina];
   if (pagina) pagina().catch(() => {});

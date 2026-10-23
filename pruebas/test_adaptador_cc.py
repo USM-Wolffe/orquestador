@@ -260,5 +260,30 @@ class PruebaConectoresOperacion(BaseCC):
         self.assertEqual(evento["datos"]["niveles"]["conectores y MCP no declarados"], "duro")
 
 
+class PruebaUsoPlan(BaseCC):
+    def test_guion_uso_plan_en_resultado(self):
+        r, _ = self.correr("uso_plan")
+        self.assertTrue(r.ok, r.error)
+        self.assertEqual(r.uso_plan["uso"], 0.62)
+        self.assertIsNotNone(r.uso_plan["visto_en"])
+        self.assertIsNotNone(r.uso_plan["reinicia"])
+
+    def test_sin_eventos_queda_null(self):
+        r, _ = self.correr("ok")
+        self.assertIsNone(r.uso_plan)
+
+    def test_escala(self):
+        for valor, esperado in ((62, 0.62), (0.62, 0.62), (0, 0.0), (100, 1.0), (250, None), (-1, None)):
+            with self.subTest(valor=valor):
+                estado = EstadoLectura(worktree=self.wt)
+                self.adaptador.normalizar({"type": "rate_limit_event",
+                                           "rate_limit_info": {"status": "allowed_warning", "utilization": valor,
+                                                               "resetsAt": 1893456000}}, estado)
+                self.assertEqual(estado.uso_plan["uso"], esperado)
+                r = self.adaptador.cierre(estado, 0, "", 1.0)
+                # sin resultado del agente, uso_plan igual viaja en el cierre si hubo evento
+                self.assertEqual(r.uso_plan["uso"], esperado)
+
+
 if __name__ == "__main__":
     unittest.main()

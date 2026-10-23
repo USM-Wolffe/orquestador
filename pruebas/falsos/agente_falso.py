@@ -144,6 +144,16 @@ def guion_limite(g: Guion) -> int:
     return 1
 
 
+def guion_uso_plan(g: Guion) -> int:
+    g.init()
+    emitir({"type": "rate_limit_event", "session_id": g.sesion,
+            "rate_limit_info": {"status": "allowed_warning", "utilization": 62,
+                                "resetsAt": int(time.time()) + 3600}})
+    g.texto("Listo con uso del plan.")
+    g.resultado("Listo con uso del plan.")
+    return 0
+
+
 def guion_limite_texto(g: Guion) -> int:
     g.init()
     emitir({"type": "result", "subtype": "success", "is_error": True, "session_id": g.sesion, "duration_ms": 10,
@@ -262,7 +272,7 @@ def guion_seguridad(g, nombre):
 
 GUIONES = {n: (lambda g, n=n: guion_seguridad(g, n)) for n in
            ("conectores", "mcp_pendiente", "herramienta_tarde", "sin_init", "forma_inesperada")}
-GUIONES.update({"ok": guion_ok, "lectura": guion_lectura, "negado": guion_negado, "limite": guion_limite,
+GUIONES.update({"ok": guion_ok, "uso_plan": guion_uso_plan, "lectura": guion_lectura, "negado": guion_negado, "limite": guion_limite,
            "limite_texto": guion_limite_texto, "limite_sin_hora": guion_limite_sin_hora, "error": guion_error, "sin_final": guion_sin_final,
            "colgado": guion_colgado, "hijo_largo": guion_hijo_largo, "sesion_inexistente": guion_sesion_inexistente,
            "intenta_commit": guion_intenta_commit, "limite_una_vez": guion_limite_una_vez,

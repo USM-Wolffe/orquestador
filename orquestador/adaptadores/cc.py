@@ -97,6 +97,17 @@ def _hora_desde_texto(texto: str, ahora: dt.datetime) -> str | None:
     return candidato.isoformat(timespec="seconds")
 
 
+def _normalizar_uso(valor) -> float | None:
+    """0..1 tal cual; (1,100] se divide por 100; cualquier otro valor da None (design D5)."""
+    if isinstance(valor, bool) or not isinstance(valor, (int, float)):
+        return None
+    if 0 <= valor <= 1:
+        return float(valor)
+    if 1 < valor <= 100:
+        return float(valor) / 100
+    return None
+
+
 def _desde_epoch(valor) -> str | None:
     if not isinstance(valor, (int, float)) or isinstance(valor, bool) or valor <= 0:
         return None
@@ -197,6 +208,11 @@ class AdaptadorCC:
             return salida
         if tipo == "rate_limit_event":
             info = linea.get("rate_limit_info") or {}
+            if not isinstance(info, dict):
+                info = {}
+            estado.uso_plan = {"uso": _normalizar_uso(info.get("utilization")),
+                               "visto_en": self.reloj().isoformat(timespec="seconds"),
+                               "reinicia": _desde_epoch(info.get("resetsAt"))}
             if info.get("status") == "rejected":
                 estado.limite_visto = True
                 estado.limite_hasta = _desde_epoch(info.get("resetsAt")) or estado.limite_hasta
@@ -232,7 +248,7 @@ class AdaptadorCC:
                    "costo_estimado": r.get("total_cost_usd") is not None, "segundos": round(duracion_s, 1)}
         resultado = Resultado(ok=bool(r) and not r.get("is_error") and codigo == 0, texto=texto, codigo_salida=codigo,
                               duracion_s=duracion_s, sesion=estado.sesion, modelo=estado.modelo, consumo=consumo,
-                              negaciones=list(r.get("permission_denials") or []))
+                              negaciones=list(r.get("permission_denials") or []), uso_plan=estado.uso_plan)
         if SESION_INEXISTENTE.search(todo):
             resultado.sesion_inexistente = True
         if estado.limite_visto or (not resultado.ok and LIMITE_TEXTO.search(todo)):

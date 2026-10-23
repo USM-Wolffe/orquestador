@@ -21,7 +21,9 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import parse_qs
 
-from . import seguridad, vistas
+import time
+
+from . import frases, seguridad, vistas
 from .estados import ESTADOS
 
 DIRECCION = "127.0.0.1"  # fija: no es configurable (spec tablero, "Solo en 127.0.0.1")
@@ -31,11 +33,67 @@ MAX_CUERPO = 16 * 1024
 CSP = ("default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self'; connect-src 'self'; "
        "base-uri 'none'; form-action 'self'; frame-ancestors 'none'")
 ESTATICOS = Path(__file__).resolve().parent / "estaticos"
-PAGINAS = {"/": ("kanban.html", "text/html; charset=utf-8"),
-           "/detalle": ("detalle.html", "text/html; charset=utf-8"),
+PAGINAS = {"/": ("tablero.html", "text/html; charset=utf-8"),
            "/consumo": ("consumo.html", "text/html; charset=utf-8"),
            "/static/app.js": ("app.js", "text/javascript; charset=utf-8"),
            "/static/app.css": ("app.css", "text/css; charset=utf-8")}
+VIGENCIA_TOKEN_S = 300.0
+PAGINA_SIN_SESION = ("<!doctype html>\n<html lang=\"es-CL\">\n<head>\n<meta charset=\"utf-8\">\n"
+                     "<title>Orquestador · entrar</title>\n<link rel=\"stylesheet\" href=\"/static/app.css\">\n"
+                     "</head>\n<body>\n<main><h1>Orquestador</h1>"
+                     "<p>Pulsa Enter en la ventana del orquestador para entrar</p></main>\n</body>\n</html>\n")
+
+
+class Entradas:
+    """Un solo token vigente, que vence a los 5 minutos y se anula al generar otro (design D8).
+
+    Token y sesiones viven solo en memoria. El reloj es inyectable para las pruebas.
+    """
+
+    def __init__(self, reloj=time.monotonic, vigencia_s: float = VIGENCIA_TOKEN_S):
+        self.reloj = reloj
+        self.vigencia_s = vigencia_s
+        self._token: str | None = None
+        self._vence: float = 0.0
+        self.sesiones: dict[str, dict] = {}
+        self._lock = threading.Lock()
+
+    def generar(self) -> str:
+        with self._lock:
+            self._token = secrets.token_urlsafe(32)  # al menos 32 bytes aleatorios
+            self._vence = self.reloj() + self.vigencia_s
+            return self._token
+
+    def canjear(self, token: str) -> str | None:
+        with self._lock:
+            if not self._token or not token or self.reloj() > self._vence:
+                return None
+            if not hmac.compare_digest(token.encode(), self._token.encode()):
+                return None
+            self._token = None
+            sesion = secrets.token_urlsafe(32)
+            self.sesiones[sesion] = {"csrf": secrets.token_urlsafe(32), "corta": secrets.token_hex(4)}
+            return sesion
+
+    def sesion(self, valor: str | None) -> dict | None:
+        if not valor:
+            return None
+        with self._lock:
+            for clave, datos in self.sesiones.items():
+                if hmac.compare_digest(clave.encode(), valor.encode()):
+                    return datos
+        return None
+
+    def cerrar_todas(self) -> int:
+        with self._lock:
+            cantidad = len(self.sesiones)
+            self.sesiones.clear()
+            return cantidad
+
+    @property
+    def abiertas(self) -> int:
+        with self._lock:
+            return len(self.sesiones)
 _NOMBRE = r"[a-z0-9][a-z0-9-]{0,60}"
 _ID = r"[A-Za-z0-9][A-Za-z0-9._-]{0,100}"
 RUTA_GATE = re.compile(rf"^/api/gate/({_NOMBRE})/({_ID})/(preparar|confirmar)$")
@@ -59,13 +117,12 @@ class _Servidor(ThreadingHTTPServer):
 
 
 class Tablero:
-    def __init__(self, orquestador, puerto: int, terminal=None):
+    def __init__(self, orquestador, puerto: int, terminal=None, reloj=time.monotonic):
         self.orq = orquestador
         self.puerto_pedido = puerto
         self.puerto = None
         self.terminal = terminal or orquestador.terminal
-        self._token_entrada: str | None = secrets.token_urlsafe(32)  # 32 bytes aleatorios
-        self._sesiones: dict[str, dict] = {}
+        self.entradas = Entradas(reloj=reloj)
         self._lock = threading.Lock()
         self._estaticos = {ruta: ((ESTATICOS / nombre).read_bytes(), tipo) for ruta, (nombre, tipo) in PAGINAS.items()}
         self.servidor: _Servidor | None = None
@@ -83,7 +140,12 @@ class Tablero:
         self.hilo = threading.Thread(target=self.servidor.serve_forever, kwargs={"poll_interval": 0.2},
                                      name="tablero", daemon=True)
         self.hilo.start()
-        enlace = f"http://{DIRECCION}:{self.puerto}/entrar?t={self._token_entrada}"
+        return self.nuevo_enlace()
+
+    def nuevo_enlace(self) -> str:
+        """Genera un token nuevo (anula el anterior) y devuelve su enlace; el token solo va en el enlace."""
+        token = self.entradas.generar()
+        enlace = f"http://{DIRECCION}:{self.puerto}/entrar?t={token}"
         self.terminal(f"Tablero: abre este enlace en el navegador (sirve una sola vez): {enlace}")
         return enlace
 
@@ -96,22 +158,17 @@ class Tablero:
     # --- sesiones (solo en memoria) ---
 
     def canjear(self, token: str) -> str | None:
-        with self._lock:
-            if not self._token_entrada or not hmac.compare_digest(token.encode(), self._token_entrada.encode()):
-                return None
-            self._token_entrada = None
-            sesion = secrets.token_urlsafe(32)
-            self._sesiones[sesion] = {"csrf": secrets.token_urlsafe(32), "corta": secrets.token_hex(4)}
-            return sesion
+        sesion = self.entradas.canjear(token)
+        if sesion is not None:
+            hora = self.orq.reloj().strftime("%H:%M")
+            self.terminal(f"[tablero] sesión nueva {hora} ({self.entradas.abiertas} abiertas)")
+        return sesion
 
     def sesion(self, valor: str | None) -> dict | None:
-        if not valor:
-            return None
-        with self._lock:
-            for clave, datos in self._sesiones.items():
-                if hmac.compare_digest(clave.encode(), valor.encode()):
-                    return datos
-        return None
+        return self.entradas.sesion(valor)
+
+    def cerrar_sesiones(self) -> int:
+        return self.entradas.cerrar_todas()
 
     # --- datos ---
 
@@ -137,13 +194,55 @@ class Tablero:
             return None
         return next((t for t in datos["tareas"] if t["id"] == id_tarea), None)
 
+    def api_tablero(self, consulta: dict) -> dict:
+        inst = self.orq.instantanea()
+        diffstats, informes, eventos = {}, {}, {}
+        for nombre, datos in inst.get("proyectos", {}).items():
+            ep = self.orq.proyectos.get(nombre)
+            if ep is None:
+                continue
+            lector = self.orq.lectores.get(nombre)
+            for t in datos.get("tareas", []):
+                diffstats[(nombre, t["id"])] = vistas.leer_diffstat(ep.proyecto.carpeta, t["id"])
+                informes[(nombre, t["id"])] = vistas.leer_informe(ep.proyecto.carpeta, t["id"])
+                # Solo las tareas cuyos eventos usa la vista (frase del agente y pruebas del gate): leer el registro
+                # entero de cada tarea en cada sondeo de 3 s no escala.
+                if lector is not None and t.get("estado") in ("en_curso", "esperando_gate"):
+                    intento = len(t.get("corridas") or [])
+                    eventos[(nombre, t["id"])] = [e for e in lector.desde(0, tarea=t["id"])
+                                                  if e.get("intento") in (intento, None)]
+        gates = {"deshabilitados": self.orq.gates.motivo_deshabilitados,
+                 "aviso_integridad": self.orq.gates.aviso_integridad}
+        return vistas.tablero(inst, self.ahora(), consulta.get("proyecto"), diffstats=diffstats,
+                              informes=informes, eventos=eventos, gates=gates)
+
     def api_detalle(self, proyecto: str, id_tarea: str) -> dict | None:
         t = self._tarea(proyecto, id_tarea)
         if t is None:
             return None
         ep = self.orq.proyectos[proyecto]
-        return vistas.detalle(ep.proyecto, t, self.orq.instantanea().get("agentes", {}), self.ahora(),
-                              seguridad.niveles(t["agente"]))
+        datos = vistas.detalle(ep.proyecto, t, self.orq.instantanea().get("agentes", {}), self.ahora(),
+                               seguridad.niveles(t["agente"]))
+        datos["explicacion"] = t.get("explicacion")
+        datos["revisa"] = t.get("revisa")
+        tareas = self.orq.instantanea().get("proyectos", {}).get(proyecto, {}).get("tareas", [])
+        # Encabezado del panel en lenguaje simple: nada de nombres internos fuera de los detalles técnicos.
+        datos["estado_texto"] = frases.texto_estacion(t, {x["id"]: x for x in tareas}, ahora=self.ahora(),
+                                                      agentes=self.orq.instantanea().get("agentes", {}),
+                                                      desde=vistas.desde_estado(t))
+        datos["nombre_agente"] = vistas.NOMBRES_AGENTE.get(t["agente"], t["agente"])
+        revisada = next((x for x in tareas if x["id"] == t.get("revisa")), None) if t.get("revisa") else None
+        if revisada is not None:
+            datos["explicacion"] = revisada.get("explicacion") or datos["explicacion"]
+            datos["titulo_revisada"] = revisada.get("titulo")
+        rev_tarea = t if t.get("revisa") else next((x for x in tareas if x.get("revisa") == id_tarea), None)
+        if rev_tarea is None:
+            datos["revision"] = None
+        else:
+            veredicto, resumen = vistas.veredicto_revision(vistas.leer_informe(ep.proyecto.carpeta, rev_tarea["id"]))
+            datos["revision"] = {"veredicto": veredicto, "resumen": resumen, "agente": rev_tarea.get("agente"),
+                                 "id": rev_tarea["id"]}
+        return datos
 
     def api_eventos(self, proyecto: str, id_tarea: str, consulta: dict) -> dict | None:
         t = self._tarea(proyecto, id_tarea)
@@ -157,7 +256,10 @@ class Tablero:
         eventos = [e for e in self.orq.lectores[proyecto].desde(desde, tarea=id_tarea)
                    if e.get("intento") in (intento, None)]
         ultimo = max([desde, *[e["seq"] for e in eventos]])
-        return {"intento": intento, "eventos": eventos, "ultimo": ultimo}
+        todos = [e for e in self.orq.lectores[proyecto].desde(0, tarea=id_tarea)
+                 if e.get("intento") in (intento, None)]
+        return {"intento": intento, "eventos": eventos, "ultimo": ultimo,
+                "frases": frases.frases_de_eventos(todos)}
 
     def api_consumo(self, consulta: dict) -> dict:
         desde = consulta.get("desde") if FECHA_OK.match(consulta.get("desde") or "") else None
@@ -256,8 +358,13 @@ def _manejador_para(tablero: Tablero):
                 return self._json(405, {"error": "el tablero es de solo lectura"}, {"Allow": "GET, HEAD"})
             if ruta == "/entrar":
                 return self._entrar(consulta)
+            if ruta in tablero._estaticos and ruta.startswith("/static/"):
+                cuerpo, tipo = tablero._estaticos[ruta]
+                return self._enviar(200, cuerpo, tipo)
             sesion = tablero.sesion(self._cookie())
             if sesion is None:
+                if ruta == "/":
+                    return self._enviar(401, PAGINA_SIN_SESION.encode("utf-8"), "text/html; charset=utf-8")
                 return self._json(401, {"error": "sin sesión: usa el enlace que muestra la terminal"})
             if gate:
                 return self._gate(sesion, *gate.groups())
@@ -278,6 +385,8 @@ def _manejador_para(tablero: Tablero):
                 return self._enviar(200, cuerpo, tipo)
             if ruta == "/api/sesion":
                 return self._json(200, tablero.api_sesion(sesion))
+            if ruta == "/api/tablero":
+                return self._json(200, tablero.api_tablero(consulta))
             if ruta == "/api/tareas":
                 return self._json(200, tablero.api_tareas(consulta))
             if ruta == "/api/consumo":

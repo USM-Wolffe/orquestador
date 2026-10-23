@@ -181,6 +181,8 @@ class Orquestador:
             else:
                 info = verificar_version(adaptador, agente.ejecutable, seguridad.entorno_filtrado(self.entorno_base))
             info["agotado_hasta"] = previo.get("agotado_hasta")
+            if previo.get("uso_plan") is not None:
+                info["uso_plan"] = previo.get("uso_plan")
             self.agentes[nombre] = info
             if not info["disponible"]:
                 self.log(f"agente '{nombre}' no disponible: {info['motivo']}")
@@ -556,6 +558,10 @@ class Orquestador:
         if r is not None:
             t["consumo"][t["agente"]] = _sumar_consumo(t["consumo"].get(t["agente"], {}), r.consumo)
             ultima.update(modelo=r.modelo, consumo=dict(r.consumo or {}), duracion_s=round(r.duracion_s, 1))
+            if getattr(r, "uso_plan", None) is not None:
+                info = self.agentes.setdefault(t["agente"], {})
+                info["uso_plan"] = dict(r.uso_plan)
+                self._guardar_agentes()
         error = None if d.clase == "ok" else {"clase": d.clase, "mensaje": redactar(d.mensaje or "")[:1000]}
         t["resultado"] = {"ok": d.clase == "ok", "resumen": redactar((r.texto if r else "") or "")[:500],
                           "error": error, "codigo_salida": r.codigo_salida if r else None,

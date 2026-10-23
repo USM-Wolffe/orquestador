@@ -154,11 +154,47 @@ class PruebaDefensas(PruebaOrq):
         self.assertFalse([k for k in encabezados if k.startswith("access-control-")])
 
     def test_paginas_sin_scripts_en_linea(self):
-        for ruta in ("/", "/detalle", "/consumo"):
+        for ruta in ("/", "/consumo"):
             _, _, cuerpo = self.cliente.pedir("GET", ruta)
             self.assertNotRegex(cuerpo.decode("utf-8"), r"<script(?![^>]*\bsrc=)")
         _, _, js = self.cliente.pedir("GET", "/static/app.js")
         self.assertNotIn(b"innerHTML", js)
+
+    def test_estaticos_sin_codigo_en_linea(self):
+        # Tarea 3.1 (operacion-v1): ni scripts/estilos en línea, ni style/on*, ni fuentes externas.
+        for ruta in ("/", "/consumo"):
+            _, _, cuerpo = self.cliente.pedir("GET", ruta)
+            html = cuerpo.decode("utf-8")
+            self.assertIsNone(re.search(r"<style\b", html), ruta)
+            self.assertIsNone(re.search(r"\sstyle\s*=", html), ruta)
+            self.assertIsNone(re.search(r"\son\w+\s*=", html), ruta)
+            self.assertNotIn("javascript:", html)
+        _, _, css = self.cliente.pedir("GET", "/static/app.css")
+        css_t = css.decode("utf-8")
+        self.assertNotIn("@font-face", css_t)
+        self.assertIsNone(re.search(r"url\(\s*['\"]?https?:", css_t))
+        self.assertIn("Bahnschrift", css_t)
+        self.assertIn("Segoe UI", css_t)
+        html = self.cliente.pedir("GET", "/")[2].decode("utf-8")
+        for texto in ("Te toca decidir", "Ahora mismo", "El plan", "Detalles técnicos"):
+            self.assertIn(texto, html)
+        _, _, js = self.cliente.pedir("GET", "/static/app.js")
+        self.assertNotIn(b"eval", js)
+        self.assertNotIn(b"new Function", js)
+        self.assertIn(b"textContent", js)
+
+    def test_estaticos_sin_sesion_y_pagina_401(self):
+        sin = ClienteTablero(self.cliente.puerto)
+        self.assertEqual(sin.pedir("GET", "/static/app.css")[0], 200)
+        self.assertEqual(sin.pedir("GET", "/static/app.js")[0], 200)
+        estado, _, cuerpo = sin.pedir("GET", "/")
+        self.assertEqual(estado, 401)
+        self.assertIn("Pulsa Enter en la ventana del orquestador para entrar", cuerpo.decode("utf-8"))
+        self.assertNotIn(b"T-1", cuerpo)
+        self.assertNotIn(b"demo", cuerpo)
+
+    def test_detalle_ya_no_existe(self):
+        self.assertEqual(self.cliente.pedir("GET", "/detalle?p=demo&id=T-1")[0], 404)
 
 
 class PruebaSoloLectura(PruebaOrq):
@@ -172,7 +208,8 @@ class PruebaSoloLectura(PruebaOrq):
         orq.ciclo()
         _, con_sesion, _ = self.tablero(orq)
         sin_sesion = ClienteTablero(con_sesion.puerto)
-        rutas = ["/", "/detalle?p=demo&id=T-1", "/consumo", "/static/app.js", "/static/app.css", "/api/sesion",
+        rutas = ["/", "/consumo", "/static/app.js", "/static/app.css", "/api/sesion",
+                 "/api/tablero", "/api/tablero?proyecto=demo",
                  "/api/tareas", "/api/tareas?proyecto=demo&agente=cc", "/api/consumo?desde=2026-10-01",
                  "/api/tareas/demo/T-1", "/api/tareas/demo/T-2", "/api/tareas/demo/T-1/eventos?desde=0",
                  "/api/tareas/demo/NO", "/entrar?t=malo", "/no-existe", "/api/gate/demo/T-2/aprobar"]
@@ -218,7 +255,9 @@ class PruebaKanbanDetalleConsumo(PruebaOrq):
         tarjeta = datos["tarjetas"][0]
         self.assertEqual(tarjeta["plan_agotado_hasta"], "2099-01-01T18:00:00-03:00")
         self.assertIn("plan agotado", tarjeta["motivo"])
-        self.assertIn(b"plan agotado hasta", self.cliente.pedir("GET", "/static/app.js")[2])
+        _, datos_tablero = self.cliente.json("/api/tablero?proyecto=demo")
+        self.assertEqual(datos_tablero["agentes"][0]["estado"], "plan_agotado")
+        self.assertIn(b"Plan agotado", self.cliente.pedir("GET", "/static/app.js")[2])
 
     def test_actividad_en_vivo(self):
         self.poner_tarea(self.orq, "en_curso", id="T-1", corridas=[{"intento": 1, "agente": "cc"}])
@@ -274,7 +313,7 @@ class PruebaKanbanDetalleConsumo(PruebaOrq):
         self.assertFalse(d["diff_disponible"])
         self.assertIsNone(d["diffstat"])
         self.assertEqual(d["titulo"], "Tarea sintética")
-        self.assertIn(b"diff no disponible", self.cliente.pedir("GET", "/static/app.js")[2])
+        self.assertIn("diff no disponible", self.cliente.pedir("GET", "/")[2].decode("utf-8"))
 
     def test_vista_de_consumo(self):
         gasto = {"tokens_entrada": 1200, "tokens_salida": 340, "tokens_cache_lectura": 800,
@@ -293,6 +332,75 @@ class PruebaKanbanDetalleConsumo(PruebaOrq):
         _, datos = self.cliente.json("/api/consumo?desde=2026-10-21&hasta=2026-10-21")
         self.assertEqual(datos["agentes"][0]["costo_texto"], "sin costo informado")
         self.assertEqual(self.cliente.json("/api/consumo?proyecto=otro")[1]["agentes"], [])
+
+
+class PruebaApiTablero(PruebaOrq):
+    def setUp(self):
+        super().setUp()
+        self.instalar()
+        self.orq = self.orquestador()
+        _, self.cliente, _ = self.tablero(self.orq)
+
+    def test_api_tablero_con_gate_revisado(self):
+        revisada = self.poner_tarea(self.orq, "hecha", id="T-1", titulo="Adaptador de Codex",
+                                    explicacion="Que Codex reciba tareas.")
+        revision = self.poner_tarea(self.orq, "esperando_gate", id="T-1r", revisa="T-1", cambio="login")
+        carpeta = self.orq.proyectos["demo"].proyecto.carpeta
+        (carpeta / "resultados").mkdir(exist_ok=True)
+        (carpeta / "resultados" / "T-1r.md").write_text("Veredicto: con reparos\nFalta una prueba.", encoding="utf-8")
+        (carpeta / "diffstat").mkdir(exist_ok=True)
+        (carpeta / "diffstat" / "T-1r.json").write_text(json.dumps(
+            {"base": "main", "archivos": [{"ruta": "a.py", "agregadas": 3, "borradas": 0, "nuevo": True, "binario": False}],
+             "total": {"archivos": 1, "agregadas": 3, "borradas": 0}}), encoding="utf-8")
+        self.orq._publicar()
+        estado, datos = self.cliente.json("/api/tablero?proyecto=demo")
+        self.assertEqual(estado, 200)
+        self.assertEqual(datos["turno"][0]["explicacion"], "Que Codex reciba tareas.")
+        self.assertEqual(datos["turno"][0]["archivos"], 1)
+        self.assertEqual(datos["turno"][0]["revision"]["veredicto"], "con_reparos")
+        self.assertIn("Falta una prueba", datos["turno"][0]["revision"]["resumen"])
+        self.assertNotIn("PROMPT", json.dumps(datos))
+        self.assertNotIn("#guion: ok", json.dumps(datos))
+
+    def test_api_tablero_sin_sesion_401(self):
+        sin = ClienteTablero(self.cliente.puerto)
+        estado, _, cuerpo = sin.pedir("GET", "/api/tablero")
+        self.assertEqual(estado, 401)
+        self.assertNotIn(b"demo", cuerpo)
+
+    def test_panel_en_lenguaje_simple(self):
+        self.poner_tarea(self.orq, "esperando_gate", id="T-1")
+        _, d = self.cliente.json("/api/tareas/demo/T-1")
+        self.assertEqual(d["estado_texto"], "Te espera")
+        self.assertEqual(d["nombre_agente"], "Claude Code")
+        js = self.cliente.pedir("GET", "/static/app.js")[2]
+        self.assertIn(b"d.estado_texto", js)
+        self.assertNotIn(b"${d.estado}`", js)  # el estado interno no va en el encabezado del panel
+        self.assertIn(b"tareas terminaron y esperan", js)
+
+    def test_solo_lee_eventos_de_tareas_en_curso_o_en_gate(self):
+        self.poner_tarea(self.orq, "hecha", id="T-1")
+        self.poner_tarea(self.orq, "esperando_gate", id="T-2")
+        lector = self.orq.lectores["demo"]
+        original = lector.desde
+        leidas = []
+
+        def contar(desde, tarea=None, **extra):
+            leidas.append(tarea)
+            return original(desde, tarea=tarea, **extra)
+
+        lector.desde = contar
+        self.addCleanup(vars(lector).pop, "desde", None)
+        self.assertEqual(self.cliente.json("/api/tablero?proyecto=demo")[0], 200)
+        self.assertIn("T-2", leidas)
+        self.assertNotIn("T-1", leidas)
+
+    def test_titulo_con_html_se_muestra_como_texto(self):
+        self.poner_tarea(self.orq, "esperando_gate", id="T-1", titulo="<img src=x onerror=alert(1)>")
+        _, datos = self.cliente.json("/api/tablero?proyecto=demo")
+        self.assertEqual(datos["turno"][0]["titulo"], "<img src=x onerror=alert(1)>")
+        js = self.cliente.pedir("GET", "/static/app.js")[2]
+        self.assertNotIn(b"innerHTML", js)
 
 
 if __name__ == "__main__":

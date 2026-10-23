@@ -50,6 +50,7 @@ class EstadoLectura:
     limite_hasta: str | None = None
     limite_visto: bool = False
     lineas_no_json: int = 0
+    uso_plan: dict | None = None
 
 
 @dataclass
@@ -65,6 +66,7 @@ class Resultado:
     error: dict | None = None  # {"clase": ..., "mensaje": ...}
     limite: Limite | None = None
     sesion_inexistente: bool = False
+    uso_plan: dict | None = None  # {"uso": float|None, "visto_en": str, "reinicia": str|None}
 
 
 IGNORADO = "_ignorado"  # marca que devuelve normalizar() para un evento del agente que no conoce

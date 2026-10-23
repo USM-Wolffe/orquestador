@@ -13,6 +13,7 @@ import os
 import re
 from pathlib import Path
 
+from . import frases
 from .comun import leer_json, sha256
 from .estados import ESTADOS
 from .redaccion import redactar, truncar
@@ -95,6 +96,181 @@ def tarjetas(instantanea: dict, ahora: dt.datetime, proyecto: str | None = None,
             salida.append(tarjeta(nombre, t, instantanea.get("agentes", {}), ahora))
     salida.sort(key=lambda c: (ESTADOS.index(c["estado"]) if c["estado"] in ESTADOS else 99, c["proyecto"], c["id"]))
     return salida
+
+
+_VEREDICTOS = {"sin reparos": "sin_reparos", "con reparos": "con_reparos", "no concluyente": "no_concluyente"}
+NOMBRES_AGENTE = {"cc": "Claude Code", "codex": "Codex", "cursor": "Cursor"}
+
+
+def veredicto_revision(informe: str | None) -> tuple[str, str | None]:
+    """Veredicto de la primera línea del informe y resumen de los 500 caracteres siguientes (redactados)."""
+    if not informe:
+        return "no_concluyente", None
+    primera, _, resto = informe.partition("\n")
+    m = re.match(r"\s*Veredicto:\s*(sin reparos|con reparos|no concluyente)\s*\.?\s*$", primera, re.IGNORECASE)
+    if not m:
+        return "no_concluyente", truncar(redactar(informe.strip()), 500) or None
+    resumen = truncar(redactar(resto.strip()), 500)
+    return _VEREDICTOS[m.group(1).lower()], resumen or None
+
+
+def _buscar_mapa(mapa, proyecto: str, id_tarea: str):
+    if not mapa:
+        return None
+    if (proyecto, id_tarea) in mapa:
+        return mapa[(proyecto, id_tarea)]
+    return mapa.get(id_tarea)
+
+
+def _orden_topologico(tareas: list[dict]) -> list[dict]:
+    por_id = {t["id"]: t for t in tareas}
+    restantes = list(tareas)
+    salida, vistos = [], set()
+    while restantes:
+        listas = [t for t in restantes
+                  if all(d not in por_id or d in vistos for d in t.get("dependencias") or [])]
+        if not listas:  # ciclo o dependencia rota: se sigue por fecha e id, sin perder tareas
+            listas = restantes
+        listas.sort(key=lambda t: (t.get("creada") or "", t["id"]))
+        elegida = listas[0]
+        salida.append(elegida)
+        vistos.add(elegida["id"])
+        restantes.remove(elegida)
+    return salida
+
+
+def tablero(instantanea: dict, ahora: dt.datetime, proyecto: str | None = None, *, diffstats=None,
+            informes=None, eventos=None, gates=None) -> dict:
+    """Datos de la página principal (design D4): turno, agentes y plan, sin prompt y con textos redactados."""
+    proyectos_datos = instantanea.get("proyectos", {}) or {}
+    nombres = sorted(proyectos_datos)
+    seleccion = proyecto if proyecto in proyectos_datos else None
+    alcance = [seleccion] if seleccion else nombres
+    agentes_info = instantanea.get("agentes", {}) or {}
+
+    # --- Te toca decidir ---
+    turno = []
+    for nombre in alcance:
+        tareas = proyectos_datos[nombre].get("tareas", [])
+        por_id = {t["id"]: t for t in tareas}
+        for t in tareas:
+            if t.get("estado") != "esperando_gate":
+                continue
+            revisada = por_id.get(t.get("revisa")) if t.get("revisa") else None
+            diff = _buscar_mapa(diffstats, nombre, t["id"])
+            archivos = 0
+            if isinstance(diff, dict):
+                total = diff.get("total")
+                archivos = total.get("archivos", 0) if isinstance(total, dict) else len(diff.get("archivos") or [])
+            pruebas = None
+            for e in reversed(_buscar_mapa(eventos, nombre, t["id"]) or []):
+                d = e.get("datos") or {}
+                if e.get("tipo") == "comando" and ("unittest" in str(d.get("comando") or "")
+                                                  or "pytest" in str(d.get("comando") or "")) \
+                        and d.get("estado") in ("ok", "error"):
+                    pruebas = {"ok": d.get("estado") == "ok", "en": e.get("ts")}
+                    break
+            revision = None
+            rev_tarea = t if t.get("revisa") else next((x for x in tareas if x.get("revisa") == t["id"]), None)
+            if rev_tarea is not None:
+                veredicto, resumen = veredicto_revision(_buscar_mapa(informes, nombre, rev_tarea["id"]))
+                revision = {"veredicto": veredicto, "resumen": resumen, "agente": rev_tarea.get("agente")}
+            explicacion = (revisada or {}).get("explicacion") or t.get("explicacion")
+            turno.append({"id": t["id"], "proyecto": nombre,
+                          "titulo": redactar((revisada or t).get("titulo") or ""),
+                          "explicacion": redactar(explicacion) if explicacion else None,
+                          "archivos": archivos, "pruebas": pruebas, "revision": revision})
+
+    # --- Ahora mismo ---
+    agentes = []
+    hoy = ahora.date()
+    for agente in sorted(agentes_info):
+        info = agentes_info[agente] or {}
+        tareas_agente = [t for n in alcance for t in proyectos_datos[n].get("tareas", []) if t.get("agente") == agente]
+        en_curso = next((t for t in tareas_agente if t.get("estado") == "en_curso"), None)
+        frase = frase_en = None
+        if en_curso is not None:
+            bitacora = frases.frases_de_eventos(_eventos_de(eventos, alcance, proyectos_datos, en_curso))
+            if bitacora:
+                frase, frase_en = bitacora[-1]["frase"], bitacora[-1]["ts"]
+        segundos_hoy, tareas_hoy = 0.0, set()
+        for t in tareas_agente:
+            for c in t.get("corridas") or []:
+                inicio = _fecha(c.get("inicio"))
+                if inicio is None or inicio.date() != hoy:
+                    continue
+                tareas_hoy.add(t["id"])
+                if c.get("duracion_s") is not None:
+                    segundos_hoy += c.get("duracion_s") or 0
+                elif _fecha(c.get("fin")):
+                    segundos_hoy += (_fecha(c.get("fin")) - inicio).total_seconds()
+                elif t.get("estado") == "en_curso":
+                    segundos_hoy += max(0.0, (ahora - inicio).total_seconds())
+        agotado = info.get("agotado_hasta")
+        fecha_agotado = _fecha(agotado)
+        if en_curso is not None:
+            estado_ag, motivo, reinicio, titulo_tarea = "trabajando", None, None, en_curso.get("titulo")
+        elif fecha_agotado and fecha_agotado > ahora:
+            estado_ag, reinicio = "plan_agotado", agotado
+            motivo, titulo_tarea = f"Plan agotado · sigue a las {fecha_agotado.strftime('%H:%M')}", None
+        elif info.get("disponible") is False:
+            estado_ag, motivo, reinicio, titulo_tarea = "apagado", info.get("motivo") or "Agente apagado", None, None
+        else:
+            estado_ag, motivo, reinicio, titulo_tarea = "disponible", None, None, None
+        uso_plan = info.get("uso_plan") if isinstance(info.get("uso_plan"), dict) else {}
+        uso = uso_plan.get("uso")
+        agentes.append({"agente": agente, "nombre": NOMBRES_AGENTE.get(agente, agente), "estado": estado_ag,
+                        "tarea": titulo_tarea, "frase": frase, "frase_en": frase_en, "motivo": motivo,
+                        "reinicio": reinicio,
+                        "hoy": {"minutos": int(segundos_hoy // 60), "tareas": len(tareas_hoy)},
+                        "plan": {"uso": uso, "visto_en": uso_plan.get("visto_en") if uso is not None else None}})
+
+    # --- El plan ---
+    plan = []
+    corte = ahora - dt.timedelta(hours=24)
+    for nombre in alcance:
+        tareas = proyectos_datos[nombre].get("tareas", [])
+        por_id = {t["id"]: t for t in tareas}
+        por_cambio: dict[str, list[dict]] = {}
+        for t in tareas:
+            por_cambio.setdefault(t.get("cambio"), []).append(t)
+        for cambio in sorted(por_cambio, key=lambda c: str(c)):
+            grupo = por_cambio[cambio]
+            sin_terminar = any(t.get("estado") not in ("hecha", "cancelada") for t in grupo)
+            reciente = any((_fecha(t.get("terminada") or t.get("actualizada")) or dt.datetime.min.replace(tzinfo=ahora.tzinfo)) >= corte
+                           for t in grupo)
+            if not (sin_terminar or reciente):
+                continue
+            orden = _orden_topologico(grupo)
+            estaciones, anterior = [], None
+            for t in orden:
+                estaciones.append({"id": t["id"], "titulo": redactar(t.get("titulo") or ""), "agente": t.get("agente"),
+                                   "forma": frases.forma_estacion(t),
+                                   "texto": frases.texto_estacion(t, por_id, anterior=anterior, ahora=ahora,
+                                                                  agentes=agentes_info,
+                                                                  desde=desde_estado(t))})
+                anterior = t["id"]
+            listas_c = sum(1 for t in grupo if t.get("estado") == "hecha")
+            nota = None
+            for i, t in enumerate(orden):
+                if t.get("estado") == "esperando_gate":
+                    nota = f"termina cuando apruebes la {i + 1}"
+                    break
+            if nota is None and listas_c == len(grupo):
+                nota = "todas listas"
+            plan.append({"proyecto": nombre, "cambio": cambio, "listas": listas_c, "total": len(grupo),
+                         "nota": nota, "estaciones": estaciones})
+
+    return {"momento": instantanea.get("momento"), "proyecto": seleccion, "proyectos": nombres,
+            "gates": gates if gates is not None else {"deshabilitados": None},
+            "turno": turno, "agentes": agentes, "plan": plan}
+
+
+def _eventos_de(eventos, alcance, proyectos_datos, tarea):
+    for nombre in alcance:
+        if any(t["id"] == tarea["id"] for t in proyectos_datos[nombre].get("tareas", [])):
+            return _buscar_mapa(eventos, nombre, tarea["id"]) or []
+    return []
 
 
 def leer_diffstat(carpeta_proyecto: Path, id_tarea: str) -> dict | None:

@@ -47,12 +47,16 @@ En otra ventana, deja una tarea con gate:
     [IO.File]::WriteAllText("$env:USERPROFILE\Orquestador-Cowork\demo\entrada\01.json", '{"op":"crear","tareas":[{"id":"T-1","titulo":"Saludo","prompt":"Crea hola.txt con la palabra hola.","agente":"cc","cambio":"saludo","gate":{"requiere":true}}]}')
 
 Esperado, en orden:
-1. Al abrir el enlace de la terminal entras al tablero. Al abrirlo una segunda vez recibes 401.
+1. Al abrir el enlace de la terminal entras al tablero nuevo: "Te toca decidir", "Ahora mismo" y "El plan".
+   Al abrirlo una segunda vez recibes 401. Sin sesión, `/` muestra "Pulsa Enter en la ventana del orquestador
+   para entrar".
 2. En las herramientas del navegador (F12 → Aplicación → Cookies), `orq_sesion` aparece como `HttpOnly` y
-   `SameSite=Strict`.
-3. T-1 llega a `esperando_gate`. En su detalle ves el diff stat con `hola.txt` (nuevo), el informe y la huella corta.
-4. Al pulsar **Aprobar**, la terminal muestra el código. Escríbelo y pulsa **Confirmar**: T-1 queda `hecha` y la
-   terminal muestra la línea `[gate] demo/T-1 aprobada …`.
+   `SameSite=Strict`, sin vencimiento propio.
+3. T-1 llega a `esperando_gate` y aparece en "Te toca decidir". Al pulsar **Revisar y decidir** se abre el panel:
+   ves qué se aprueba, el diff stat con `hola.txt` (nuevo), la bitácora en frases y, en "Detalles técnicos", el
+   informe y la huella corta. El panel se cierra con Escape, la × o un clic fuera.
+4. Al pulsar **Aprobar**, la terminal muestra el código. Escríbelo y pulsa **Confirmar aprobación**: T-1 queda
+   `hecha` y la terminal muestra la línea `[gate] demo/T-1 aprobada …`.
 5. `py -3.12 .\orq.py estado` muestra T-1 como `hecha`.
 6. Desde otra interfaz el tablero no responde:
 

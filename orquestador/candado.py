@@ -23,6 +23,22 @@ class Candado:
     def __init__(self, ruta: Path):
         self.ruta = ruta
         self.tomado = False
+        self.puerto: int | None = None
+
+    def fijar_puerto(self, puerto: int) -> None:
+        """Guarda el puerto del tablero en el candado (lo lee `orq abrir`); solo lo escribe el dueño."""
+        self.puerto = int(puerto)
+        if not self.tomado:
+            return
+        try:
+            datos = json.loads(self.ruta.read_text(encoding="utf-8"))
+            if datos.get("pid") != os.getpid():
+                return
+        except (OSError, ValueError, AttributeError):
+            datos = {"pid": os.getpid(), "creado": hora_creacion(os.getpid()), "desde": ahora()}
+        datos["puerto"] = self.puerto
+        with open(self.ruta, "w", encoding="utf-8") as f:
+            json.dump(datos, f)
 
     def _crear(self) -> None:
         fd = os.open(self.ruta, os.O_CREAT | os.O_EXCL | os.O_WRONLY)

@@ -15,7 +15,8 @@ from .comun import BASE_OK, ID_OK, NOMBRE_OK, a_json, escribir_atomico, marca, r
 
 # Campos que Cowork puede fijar al crear o editar una tarea (E1).
 CAMPOS_COWORK = frozenset({"id", "titulo", "prompt", "agente", "agentes_permitidos", "dependencias", "cambio",
-                           "rama", "base", "red", "prioridad", "nueva_sesion", "timeout_min", "no_antes_de", "gate"})
+                           "rama", "base", "red", "prioridad", "nueva_sesion", "timeout_min", "no_antes_de", "gate",
+                           "explicacion", "revisa"})
 # Campos que solo maneja el orquestador.
 CAMPOS_INTERNOS = frozenset({"estado", "motivo", "intentos", "max_intentos", "interrupciones", "limites_plan",
                              "resultado", "consumo", "corridas", "creada", "actualizada", "iniciada", "terminada",
@@ -125,6 +126,24 @@ def construir_tarea(datos: dict, proyecto, agentes: dict, momento: str) -> dict:
         except ValueError:
             raise ErrorValidacion("no_antes_de debe ser una fecha ISO 8601 con zona horaria") from None
 
+    explicacion = datos.get("explicacion")
+    if explicacion is not None:
+        if not isinstance(explicacion, str) or not explicacion.strip():
+            raise ErrorValidacion("'explicacion' debe ser un texto no vacío")
+        if len(explicacion) > 300:
+            raise ErrorValidacion("'explicacion' supera 300 caracteres")
+        if any(ord(c) < 32 or ord(c) == 127 for c in explicacion):
+            raise ErrorValidacion("'explicacion' no puede traer caracteres de control ni saltos de línea")
+
+    revisa = datos.get("revisa")
+    if revisa is not None:
+        if not isinstance(revisa, str) or not ID_OK.match(revisa):
+            raise ErrorValidacion("'revisa' debe ser el id de otra tarea")
+        if revisa == id_tarea:
+            raise ErrorValidacion("una tarea no se puede revisar a sí misma")
+        if revisa not in dependencias:
+            dependencias = [*dependencias, revisa]
+
     gate_pedido = datos.get("gate", {})
     if not isinstance(gate_pedido, dict) or set(gate_pedido) - CAMPOS_GATE_COWORK:
         raise ErrorValidacion("gate solo admite 'requiere' y 'motivo'")
@@ -140,6 +159,7 @@ def construir_tarea(datos: dict, proyecto, agentes: dict, momento: str) -> dict:
         "estado": None, "motivo": None, "dependencias": list(dependencias), "cambio": cambio, "rama": rama,
         "base": base, "red": red, "prioridad": prioridad, "nueva_sesion": nueva_sesion, "timeout_min": timeout,
         "no_antes_de": no_antes_de,
+        "explicacion": explicacion, "revisa": revisa,
         "gate": {"requiere": requiere, "motivo": motivo_gate, "decision": None, "nota": None, "en": None,
                  "huella": None, "via": None},
         "intentos": 0, "max_intentos": 3, "interrupciones": 0, "limites_plan": 0,

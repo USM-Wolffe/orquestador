@@ -61,26 +61,34 @@ pruebas no usan red ni agentes reales: los agentes se simulan con `pruebas/falso
 
 ## 2. Datos del tablero (parte B)
 
-- [ ] 2.1 (S) Campos opcionales en `entrada.py` (spec registro-tareas):
+- [x] 2.1 (S) Campos opcionales en `entrada.py` (spec registro-tareas):
+  Comprobada por: `test_entrada.PruebaExplicacionYRevisa` (explicación válida e inválida, revisión válida con
+  dependencia automática, revisión de otro cambio, inexistente y a sí misma).
   - `explicacion`: hasta 300 caracteres, sin control ni saltos de línea.
   - `revisa`: tarea existente del mismo proyecto y cambio, distinta de sí misma, agregada a las dependencias.
 
   Verifica: pruebas de `test_entrada` para el caso válido, la explicación inválida, la revisión de otro cambio y la
   dependencia automática.
-- [ ] 2.2 (S) Uso del plan (design D5):
+- [x] 2.2 (S) Uso del plan (design D5):
+  Comprobada por: `test_adaptador_cc.PruebaUsoPlan` (guion `uso_plan`, sin eventos, escala 62/0,62/250) y
+  `test_planificador.PruebaUsoPlanGuardado` (el valor queda en `agentes.json`; sin eventos queda `null`).
   - `cc` lee `utilization` y `resetsAt` de todo `rate_limit_event`, normaliza a 0..1 o `null` y lo deja en
     `Resultado.uso_plan`.
   - El planificador guarda el último valor por agente en `agentes.json`.
 
   Verifica: con el guion `uso_plan`, el valor queda en `agentes.json`; sin eventos queda `null`; 62 da 0,62 y 250
   da `null`.
-- [ ] 2.3 (M) `orquestador/frases.py` (design D6): eventos a frases, estados de estación en texto y frases de error
+- [x] 2.3 (M) `orquestador/frases.py` (design D6): eventos a frases, estados de estación en texto y frases de error
+  Comprobada por: `test_frases` (frases comunes, mensajes fuera, negaciones siempre, repeticiones juntas,
+  frases de error y textos de estación de la spec).
   por clase; junta repeticiones, deja fuera los mensajes y muestra siempre las negaciones.
 
   Verifica: pruebas unitarias con los escenarios de las specs ("Te espera", "Espera a T-2", "Espera a la anterior",
   "Trabajando, 12 min", "Editó orquestador/tablero.py (2 veces)", "Intentó git push y se le negó", "Se detuvo por
   seguridad").
-- [ ] 2.4 (M) `vistas.tablero()` y `GET /api/tablero` (design D4):
+- [x] 2.4 (M) `vistas.tablero()` y `GET /api/tablero` (design D4):
+  Comprobada por: `test_vistas_tablero` (turno con revisión y evidencia, veredictos, agentes, plan topológico,
+  sin prompt) y `test_tablero.PruebaApiTablero` (API completa, 401 sin sesión, título con HTML como texto).
   - Turno con explicación, evidencia y revisión (veredicto de la primera línea del informe).
   - Agentes con frase, consumo del día y plan.
   - Plan con orden topológico, "N de M listas", nota y cambios de las últimas 24 horas.
@@ -91,14 +99,19 @@ pruebas no usan red ni agentes reales: los agentes se simulan con `pruebas/falso
 
 ## 3. Página del tablero (parte B)
 
-- [ ] 3.1 (M) `tablero.html` y `app.css` según `C:\work\orquestador-diseno\tablero_maqueta_v1.html` (design D7):
+- [x] 3.1 (M) `tablero.html` y `app.css` según `C:\work\orquestador-diseno\tablero_maqueta_v1.html` (design D7):
+  Comprobada por: `test_tablero.PruebaDefensas.test_estaticos_sin_codigo_en_linea` y
+  `test_paginas_sin_scripts_en_linea` (HTML y CSS servidos, sin nada en línea ni fuentes externas).
   - Barra, "Te toca decidir", "Ahora mismo", "El plan" con leyenda y panel lateral.
   - Clases por agente y por estado en lugar de `style`, `<meter>` para el plan, Bahnschrift y Segoe UI, y
     `consumo.html` con el CSS nuevo.
 
   Verifica: una prueba lee los HTML y el CSS servidos y no encuentra `<script>` sin `src`, `<style>`, atributos
   `style` ni `on*`, `javascript:`, `@font-face` ni `url(` hacia fuera.
-- [ ] 3.2 (M) `app.js` y rutas del tablero:
+- [x] 3.2 (M) `app.js` y rutas del tablero:
+  Comprobada por: `test_tablero.PruebaDefensas` (estáticos sin sesión y página 401 fija), `test_detalle_ya_no_existe`,
+  la batería `PruebaSoloLectura.test_bateria_de_peticiones`, `test_tablero.PruebaApiTablero` y las pruebas del
+  gate existentes en `test_gates`.
   - Pintado solo con `textContent`, polling cada 3 s, selector de proyecto y panel (Escape, la × o clic fuera).
   - Bitácora del panel, detalles técnicos plegados y gate con código sin cambios.
   - Rutas: `/` sirve `tablero.html`, `/detalle` se elimina, `/static/*` funciona sin sesión y `/` sin sesión da 401
@@ -111,14 +124,20 @@ pruebas no usan red ni agentes reales: los agentes se simulan con `pruebas/falso
 
 ## 4. Acceso fácil (parte C)
 
-- [ ] 4.1 (M) Entradas en `tablero.py` (design D8):
+- [x] 4.1 (M) Entradas en `tablero.py` (design D8):
+  Comprobada por: `test_acceso.PruebaEntradas` (canje, vencido con reloj inyectado, anulado, cierre de sesiones),
+  `test_acceso.PruebaEntradasEnElTablero` (aviso sin token ni cookie, cierre desde el tablero, cookie sin
+  vencimiento) y `test_tablero.test_nada_en_disco`.
   - Un solo token vigente, que vence a los 5 minutos y se anula al generar otro.
   - Cierre de todas las sesiones a pedido; cookie sin `Max-Age` ni `Expires`.
   - Aviso de sesión nueva en la terminal, sin token ni cookie.
 
   Verifica: pruebas del enlace vencido (reloj inyectado), del enlace anulado, del canje, del cierre de sesiones y
   del aviso, que no contiene el token. La prueba existente de "nada en disco" sigue pasando.
-- [ ] 4.2 (M) Terminal, `--abrir` y `orq abrir` (`orquestador/acceso.py` y `orq.py`):
+- [x] 4.2 (M) Terminal, `--abrir` y `orq abrir` (`orquestador/acceso.py` y `orq.py`):
+  Comprobada por: `test_acceso.PruebaTerminal` (entrada falsa, navegador simulado, sin TTY, sin tuberías),
+  `test_acceso.PruebaOrqAbrir` (candado vivo, abandonado y detenido sin escribir, puerto en el candado,
+  `--abrir` con `--sin-tablero`).
   - Hilo que lee la entrada estándar solo con TTY: Enter da un enlace y abre el navegador; `x` y Enter cierra las
     sesiones. Sin TTY avisa una vez.
   - El candado guarda el `puerto` del tablero.
@@ -127,7 +146,9 @@ pruebas no usan red ni agentes reales: los agentes se simulan con `pruebas/falso
 
   Verifica: pruebas con entrada estándar falsa y `webbrowser.open` simulado; `orq abrir` con el candado vivo y
   abandonado; ninguna ruta salvo `/entrar` toca los tokens y el código no crea tuberías con nombre.
-- [ ] 4.3 (S) Generador de `Orquestador.cmd` en `orquestador/acceso.py` (design D9):
+- [x] 4.3 (S) Generador de `Orquestador.cmd` en `orquestador/acceso.py` (design D9):
+  Comprobada por: `test_acceso.PruebaAccesoDirecto` (ejecución real con `cmd.exe` en `José Pérez` con espacios,
+  rutas con variables, rechazo de rutas peligrosas, `.cmd` ajeno e idempotencia, sin inicio automático).
   - Plantilla con marca, rutas con `%USERPROFILE%` o `%LOCALAPPDATA%` cuando calzan, UTF-8 con `chcp 65001` si no,
     y rechazo de `%`, `"`, `!`, `^` y saltos de línea.
   - Escritorio con `SHGetKnownFolderPath` y respaldo `%USERPROFILE%\Desktop`.
