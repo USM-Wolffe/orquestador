@@ -77,11 +77,12 @@ def abrir_desde_candado(config, abrir=None, terminal=print) -> int:
 # --- acceso directo Orquestador.cmd ---
 
 def _ruta_para_cmd(ruta) -> str:
-    texto = str(Path(ruta))
+    # La revisión de caracteres peligrosos va DESPUÉS de abspath: una ruta relativa puede verse rara
+    # y quedar limpia al absolutizarse (o al revés).
+    absoluta = os.path.abspath(str(Path(ruta)))
     for caracter in CARACTERES_PELIGROSOS:
-        if caracter in texto:
-            raise ValueError(f"la ruta no se puede escribir con seguridad en un .cmd (trae {caracter!r}): {texto}")
-    absoluta = os.path.abspath(texto)
+        if caracter in absoluta:
+            raise ValueError(f"la ruta no se puede escribir con seguridad en un .cmd (trae {caracter!r}): {absoluta}")
     entorno = os.environ
     # LOCALAPPDATA va primero: también queda bajo USERPROFILE y la plantilla usa la variable más específica.
     for variable in ("LOCALAPPDATA", "USERPROFILE"):

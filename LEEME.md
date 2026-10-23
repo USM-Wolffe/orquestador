@@ -36,14 +36,15 @@ Requisitos: Windows 11, Python 3.12 (`py -3.12`), git y Claude Code. Solo librer
 
 ## Instalación
 
-1. Crea la raíz de estado y copia el ejemplo de configuración (rutas absolutas: nunca se busca en el `PATH`):
+En un PC nuevo sigue `docs/INSTALAR.md` (requisitos, `no-push`, `orq instalar` / `--aplicar`, sesiones y Cowork).
+Resumen si el repo ya está clonado:
 
-       New-Item -ItemType Directory -Force "$env:USERPROFILE\.orquestador" | Out-Null
-       Copy-Item .\ejemplos\config.example.json "$env:USERPROFILE\.orquestador\config.json"
+1. Simula y aplica la instalación (crea la raíz de estado, `config.json` si falta, Cowork y el acceso directo):
 
-   Revisa en `config.json` las rutas de `agentes.cc.ejecutable` (por ejemplo
-   `%USERPROFILE%\.local\bin\claude.exe`) y de `herramientas.git` (por ejemplo
-   `C:\Program Files\Git\cmd\git.exe`).
+       py -3.12 .\orq.py instalar
+       py -3.12 .\orq.py instalar --aplicar
+
+   Las rutas de ejecutables son absolutas: nunca se buscan en el `PATH`.
 2. Crea un proyecto con valores seguros (gate por defecto, sin red, sin variables extra):
 
        py -3.12 .\orq.py proyecto nuevo demo --repo C:\ruta\al\repo-demo
@@ -90,6 +91,8 @@ códigos erróneos bloquean los gates hasta reiniciar `orq correr`. El commit lo
 
     py -3.12 .\orq.py estado
     py -3.12 .\orq.py abrir
+    py -3.12 .\orq.py instalar
+    py -3.12 .\orq.py instalar --aplicar
     py -3.12 .\orq.py tarea demo T-1 reintentar
     py -3.12 .\orq.py tarea demo T-1 cancelar
     py -3.12 .\orq.py proyecto lista

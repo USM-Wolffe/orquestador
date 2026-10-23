@@ -159,7 +159,10 @@ pruebas no usan red ni agentes reales: los agentes se simulan con `pruebas/falso
 
 ## 5. Instalar en otro PC (parte D)
 
-- [ ] 5.1 (M) Detección en `orquestador/instalar.py` (design D10):
+- [x] 5.1 (M) Detección en `orquestador/instalar.py` (design D10):
+  Comprobada por: `test_instalar.PruebaDeteccion` (codex alto/empate, cursor, git ausente, claude sin sesión,
+  sin leer credenciales con `open` ni con `pathlib`, entorno filtrado en cada ejecución) y
+  `test_instalar.PruebaEjecucionDeSesion` (salida a `DEVNULL`; un agente que no responde no rompe `instalar`).
   - Rutas conocidas sin el `PATH`, `--version` con 10 s como máximo y codex con la versión más alta (en empate, la
     carpeta más reciente). Cursor solo por existencia.
   - Sesión de claude y de codex solo por el código de salida, con la salida a `DEVNULL` y el entorno filtrado.
@@ -167,7 +170,9 @@ pruebas no usan red ni agentes reales: los agentes se simulan con `pruebas/falso
   Verifica: pruebas con rutas temporales y falsos (dos codex, claude sin sesión, git ausente), más una que registra
   cada archivo abierto durante la detección y no encuentra nada bajo `~/.claude`, `~/.codex`, `~/.cursor` ni
   `~/.ssh`.
-- [ ] 5.2 (M) `orq instalar [--aplicar]` y aviso del remoto:
+- [x] 5.2 (M) `orq instalar [--aplicar]` y aviso del remoto:
+  Comprobada por: `test_instalar.PruebaInstalarEscrituras` (simulación, idempotencia, config/cmd ajenos, no-push,
+  aviso, sin remoto `origin` no avisa) y `test_instalar.PruebaOrqInstalar`.
   - Plan de pasos y escrituras idempotentes: raíz, `config.json` desde el ejemplo con `json`, carpeta de Cowork y
     acceso directo.
   - `pushurl` en modo lectura, lista numerada de pendientes y aviso en el arranque de `orq correr`.
@@ -175,17 +180,21 @@ pruebas no usan red ni agentes reales: los agentes se simulan con `pruebas/falso
   Verifica: la simulación no escribe; un segundo `--aplicar` no cambia contenido ni fecha; un `config.json`
   existente queda intacto con su pendiente; un `.cmd` ajeno queda intacto; aparece el pendiente `no-push`; y
   `orq correr` muestra el aviso con un repo de prueba sin `pushurl`.
-- [ ] 5.3 (S) `docs/INSTALAR.md` (design D12), enlazado desde `LEEME.md`: requisitos, política de ejecución, llave y
+- [x] 5.3 (S) `docs/INSTALAR.md` (design D12), enlazado desde `LEEME.md`: requisitos, política de ejecución, llave y
   clonado, `no-push`, `instalar` y `--aplicar`, sesiones, proyecto y Cowork, verificación, publicar con la URL
   completa y vuelta atrás.
+  Comprobada por: `test_instalar.PruebaGuiaInstalar.test_guia_al_dia` y
+  `test_documentacion.PruebaDocumentacion.test_leeme_documenta_comandos_y_cowork`.
 
   Verifica: `test_documentacion` comprueba que cada `orq …` de la guía existe en el parser y que la guía menciona
   `--aplicar`, `no-push`, `openspec.cmd` y `Get-ExecutionPolicy`.
 
 ## 6. Integración
 
-- [ ] 6.1 (S) Suite completa sin red, `openspec.cmd validate operacion-v1 --strict` y `pruebas/COBERTURA.md` con cada
+- [x] 6.1 (S) Suite completa sin red, `openspec.cmd validate operacion-v1 --strict` y `pruebas/COBERTURA.md` con cada
   escenario nuevo apuntando a su prueba.
+  Comprobada por: suite `unittest discover -s pruebas`, `openspec.cmd validate operacion-v1 --strict` y las
+  secciones B/C/D de `pruebas/COBERTURA.md`.
 
   Verifica: `py -3.12 -m unittest discover -s pruebas` en verde, la validación sin errores y ningún escenario sin
   prueba en `COBERTURA.md`.

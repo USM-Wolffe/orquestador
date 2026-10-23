@@ -7,6 +7,7 @@ Subcomandos:
   correr        bucle del orquestador con el tablero: orq correr [--abrir] [--sin-tablero] [--una-vez]
                 [--permitir-codigo-modificado]
   abrir         abre el tablero en el navegador sin token: orq abrir
+  instalar      detecta herramientas y deja listo el PC: orq instalar [--aplicar]
   tarea         pide reintentar o cancelar una tarea: orq tarea <proyecto> <id> reintentar|cancelar
   proyecto      orq proyecto nuevo <nombre> --repo <ruta> [--base main] | orq proyecto lista
   estado        resumen del estado (solo lee)
@@ -74,6 +75,14 @@ def _abrir(args) -> int:
     from orquestador import acceso
 
     return acceso.abrir_desde_candado(cargar_config(args.config, args.raiz))
+
+
+def _instalar(args) -> int:
+    from orquestador import instalar as mod
+
+    plan = mod.instalar(aplicar=args.aplicar, raiz=Path(args.raiz) if args.raiz else None)
+    print(mod.describir(plan, args.aplicar))
+    return 0
 
 
 def _estado(args) -> int:
@@ -151,6 +160,11 @@ def construir_parser() -> argparse.ArgumentParser:
 
     sub.add_parser("estado", help="resumen del estado (solo lee)").set_defaults(funcion=_estado)
     sub.add_parser("abrir", help="abre el tablero en el navegador (sin token)").set_defaults(funcion=_abrir)
+
+    p_instalar = sub.add_parser("instalar", help="detecta herramientas y prepara el PC (simula por defecto)")
+    p_instalar.add_argument("--aplicar", action="store_true",
+                            help="crea lo que falta (sin esto, solo muestra el plan)")
+    p_instalar.set_defaults(funcion=_instalar)
 
     p_importar = sub.add_parser("importar-v0", help="importa sesiones y trabajos del puente v0 (simula por defecto)")
     p_importar.add_argument("--desde", required=True, help="carpeta del puente v0 (no se modifica)")

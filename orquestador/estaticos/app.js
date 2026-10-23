@@ -105,7 +105,8 @@ function panelGate(d, s, p, id) {
   const confirmar = el("button", "Confirmar aprobación", "btn btn-turno");
   const fila = el("div", null, "acciones");
   fila.append(codigo, confirmar);
-  cajaCodigo.append(etiqueta, fila);
+  const notaCodigo = el("p", "Dura 2 minutos. Así nadie más puede aprobar por ti.");
+  cajaCodigo.append(etiqueta, fila, notaCodigo);
   const mensaje = el("p", "", "mensaje");
   const acciones = el("div", null, "acciones");
   acciones.append(aprobar, rechazar);

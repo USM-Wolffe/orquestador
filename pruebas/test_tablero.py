@@ -182,6 +182,9 @@ class PruebaDefensas(PruebaOrq):
         self.assertNotIn(b"eval", js)
         self.assertNotIn(b"new Function", js)
         self.assertIn(b"textContent", js)
+        self.assertIn("Dura 2 minutos. Así nadie más puede aprobar por ti.".encode("utf-8"), js)
+        self.assertIn("color-mix(in srgb,var(--color) 22%,transparent)", css_t)
+        self.assertIn(".trabajando .punto", css_t)
 
     def test_estaticos_sin_sesion_y_pagina_401(self):
         sin = ClienteTablero(self.cliente.puerto)

@@ -16,7 +16,7 @@ class PruebaOrqAyuda(unittest.TestCase):
         r = subprocess.run([sys.executable, str(RAIZ_REPO / "orq.py"), "--help"], capture_output=True,
                            text=True, encoding="utf-8", timeout=60)
         self.assertEqual(r.returncode, 0, r.stderr)
-        for subcomando in ("correr", "tarea", "proyecto", "estado", "importar-v0"):
+        for subcomando in ("correr", "tarea", "proyecto", "estado", "importar-v0", "instalar", "abrir"):
             self.assertIn(subcomando, r.stdout)
 
     def test_paquete_importable(self):
@@ -26,7 +26,7 @@ class PruebaOrqAyuda(unittest.TestCase):
     def test_cada_subcomando_responde_a_help(self):
         # Tarea 9.1: todos los comandos documentados en LEEME.md responden a --help.
         for subcomando in (["correr"], ["tarea"], ["proyecto"], ["proyecto", "nuevo"], ["proyecto", "lista"],
-                           ["estado"], ["importar-v0"]):
+                           ["estado"], ["importar-v0"], ["instalar"], ["abrir"]):
             with self.subTest(subcomando=subcomando):
                 r = subprocess.run([sys.executable, str(RAIZ_REPO / "orq.py"), *subcomando, "--help"],
                                    capture_output=True, text=True, encoding="utf-8", timeout=60)

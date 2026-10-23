@@ -3,12 +3,13 @@ from __future__ import annotations
 
 import io
 import json
+import os
 import subprocess
 import sys
 import unittest
 from pathlib import Path
 
-from ayudantes import ClienteTablero, PruebaOrq, foto
+from ayudantes import ClienteTablero, PruebaOrq, foto  # ClienteTablero: enlace usado/vencido
 
 import orq as cli
 from orquestador import acceso
@@ -81,6 +82,22 @@ class PruebaEntradasEnElTablero(PruebaOrq):
         galleta = encabezados["set-cookie"]
         self.assertNotIn("Max-Age", galleta)
         self.assertNotIn("Expires", galleta)
+
+    def test_entrar_usado_o_vencido_muestra_pagina_fija(self):
+        self.instalar()
+        orq = self.orquestador()
+        _, cliente, enlace = self.tablero(orq, entrar=False)
+        self.assertEqual(cliente.entrar(enlace)[0], 302)
+        otro = ClienteTablero(cliente.puerto)
+        estado, encabezados, cuerpo = otro.pedir("GET", enlace.split(f":{cliente.puerto}", 1)[1], cookie=False)
+        self.assertEqual(estado, 401)
+        self.assertIn("text/html", encabezados.get("content-type", ""))
+        texto = cuerpo.decode("utf-8")
+        self.assertIn(
+            "Ese enlace ya se usó o venció. Si no fuiste tú, pulsa x y Enter en la ventana del orquestador "
+            "para cerrar las sesiones.",
+            texto)
+        self.assertNotIn("{", texto)  # no es JSON
 
 
 class EntradaFalsa(io.StringIO):
@@ -207,6 +224,35 @@ class PruebaAccesoDirecto(PruebaOrq):
                                                                 Path(sys.executable))
                 self.assertIsNone(destino)
                 self.assertTrue(motivo)
+
+    def test_ruta_relativa_se_absolutiza_antes_de_revisar(self):
+        # La revisión de caracteres peligrosos corre sobre la ruta absoluta, no sobre la relativa.
+        repo = self.tmp / "repo_rel"
+        repo.mkdir()
+        (repo / "orq.py").write_text("#\n", encoding="utf-8")
+        escritorio = self.tmp / "esc_rel"
+        escritorio.mkdir()
+        cwd = Path.cwd()
+        try:
+            os.chdir(self.tmp)
+            destino, motivo = acceso.generar_acceso_directo(escritorio, Path("repo_rel"), Path(sys.executable))
+        finally:
+            os.chdir(cwd)
+        self.assertIsNone(motivo)
+        self.assertTrue(destino.exists())
+        self.assertIn("repo_rel", destino.read_text(encoding="utf-8"))
+        # Al revés: la ruta relativa se ve limpia, pero la carpeta actual trae `%` y la absoluta no es segura.
+        peligrosa = self.tmp / "100%"
+        (peligrosa / "repo").mkdir(parents=True)
+        escritorio_malo = self.tmp / "esc_malo"
+        try:
+            os.chdir(peligrosa)
+            destino, motivo = acceso.generar_acceso_directo(escritorio_malo, Path("repo"), Path(sys.executable))
+        finally:
+            os.chdir(cwd)
+        self.assertIsNone(destino)
+        self.assertIn("%", motivo)
+        self.assertFalse((escritorio_malo / "Orquestador.cmd").exists())
 
     def test_no_toca_un_cmd_ajeno_ni_reescribe_el_propio(self):
         escritorio = self.tmp / "Desktop"

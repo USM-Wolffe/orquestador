@@ -199,6 +199,11 @@ class Orquestador:
                                                  "Los gates quedan deshabilitados hasta hacer commit o arrancar con "
                                                  "--permitir-codigo-modificado."))
             self.log(f"integridad: {aviso}")
+        from . import instalar as mod_instalar
+        aviso_push = mod_instalar.aviso_push(self.config.git)
+        if aviso_push:
+            self.terminal(aviso_push)
+            self.log("remoto: push por defecto habilitado")
         self._publicar()
 
     def _recuperar(self, ep: EstadoProyecto) -> None:

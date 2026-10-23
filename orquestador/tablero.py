@@ -42,6 +42,12 @@ PAGINA_SIN_SESION = ("<!doctype html>\n<html lang=\"es-CL\">\n<head>\n<meta char
                      "<title>Orquestador · entrar</title>\n<link rel=\"stylesheet\" href=\"/static/app.css\">\n"
                      "</head>\n<body>\n<main><h1>Orquestador</h1>"
                      "<p>Pulsa Enter en la ventana del orquestador para entrar</p></main>\n</body>\n</html>\n")
+PAGINA_ENLACE_USADO = (
+    "<!doctype html>\n<html lang=\"es-CL\">\n<head>\n<meta charset=\"utf-8\">\n"
+    "<title>Orquestador · enlace</title>\n<link rel=\"stylesheet\" href=\"/static/app.css\">\n"
+    "</head>\n<body>\n<main><h1>Orquestador</h1>"
+    "<p>Ese enlace ya se usó o venció. Si no fuiste tú, pulsa x y Enter en la ventana del orquestador "
+    "para cerrar las sesiones.</p></main>\n</body>\n</html>\n")
 
 
 class Entradas:
@@ -375,7 +381,7 @@ def _manejador_para(tablero: Tablero):
                 return self._enviar(200, b"", "text/plain; charset=utf-8")
             sesion = tablero.canjear(consulta.get("t") or "")
             if sesion is None:
-                return self._json(401, {"error": "enlace inválido o ya usado"})
+                return self._enviar(401, PAGINA_ENLACE_USADO.encode("utf-8"), "text/html; charset=utf-8")
             self._enviar(302, b"", "text/plain; charset=utf-8",
                          {"Location": "/", "Set-Cookie": f"{COOKIE}={sesion}; HttpOnly; SameSite=Strict; Path=/"})
 

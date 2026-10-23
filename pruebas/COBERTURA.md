@@ -240,3 +240,56 @@ además una mutación en `out/mutaciones.py` que hace fallar su prueba.
 | Paso 7, cinco capas, campos y subpasos | test_documentacion.PruebaConectoresDocumentados.test_paso_siete_cinco_capas_y_campos |
 
 - Las capas con el binario real (cuál basta sola, herramientas propias y escala de `utilization`): manual §7.
+
+## Operación v1 — parte B (tablero)
+
+Specs `tablero` y `registro-tareas` (deltas de operacion-v1).
+
+| Escenario | Prueba |
+|---|---|
+| Explicación válida e inválida | `test_entrada.PruebaExplicacionYRevisa` |
+| Revisión con dependencia automática | `test_entrada.PruebaExplicacionYRevisa` |
+| Uso del plan (utilization) | `test_adaptador_cc.PruebaUsoPlan`, `test_planificador.PruebaUsoPlanGuardado` |
+| Frases de estación y de error | `test_frases` |
+| Vista `tablero()` (turno, agentes, plan, sin prompt) | `test_vistas_tablero` |
+| API `/api/tablero` y 401 | `test_tablero.PruebaApiTablero` |
+| HTML/CSS sin código en línea; halo de Trabajando con color del agente | `test_tablero.PruebaDefensas.test_estaticos_sin_codigo_en_linea` |
+| Nota del código del gate (2 minutos) | `test_tablero.PruebaDefensas.test_estaticos_sin_codigo_en_linea` |
+| Rutas del tablero, estáticos sin sesión, página 401 | `test_tablero.PruebaDefensas` |
+
+## Operación v1 — parte C (acceso)
+
+Spec `acceso-tablero`.
+
+| Escenario | Prueba |
+|---|---|
+| Canje, vencido, anulado, cierre de sesiones | `test_acceso.PruebaEntradas` |
+| Aviso sin token; cookie sin Max-Age | `test_acceso.PruebaEntradasEnElTablero` |
+| Enlace usado o vencido: página fija (no JSON) | `test_acceso.PruebaEntradasEnElTablero.test_entrar_usado_o_vencido_muestra_pagina_fija` |
+| Enter / x en la terminal; sin TTY | `test_acceso.PruebaTerminal` |
+| `orq abrir` con candado vivo o abandonado | `test_acceso.PruebaOrqAbrir` |
+| `.cmd` con espacios/tildes; rechazo de `%` etc. | `test_acceso.PruebaAccesoDirecto` |
+| Ruta relativa absolutizada antes de revisar peligros | `test_acceso.PruebaAccesoDirecto.test_ruta_relativa_se_absolutiza_antes_de_revisar` |
+| `.cmd` ajeno intacto; sin inicio automático | `test_acceso.PruebaAccesoDirecto` |
+
+## Operación v1 — parte D (instalación)
+
+Spec `instalacion`.
+
+| Escenario | Prueba |
+|---|---|
+| Simulación no escribe | `test_instalar.PruebaInstalarEscrituras.test_simulacion_no_escribe` |
+| Idempotencia de `--aplicar` | `test_instalar.PruebaInstalarEscrituras.test_aplicar_idempotente` |
+| Varias versiones de codex | `test_instalar.PruebaDeteccion.test_varias_versiones_de_codex_elige_la_mas_alta` |
+| Empate de versión → carpeta más reciente | `test_instalar.PruebaDeteccion.test_empate_de_version_elige_carpeta_mas_reciente` |
+| Cursor por existencia, sin ejecutar | `test_instalar.PruebaDeteccion.test_cursor_por_existencia_sin_ejecutarlo` |
+| Git ausente | `test_instalar.PruebaDeteccion.test_git_ausente_queda_en_pendientes` |
+| Claude sin sesión | `test_instalar.PruebaDeteccion.test_claude_sin_sesion` |
+| Sin leer credenciales ni volcar salida | `test_instalar.PruebaDeteccion.test_sin_leer_credenciales_ni_volcar_salida` |
+| Config existente intacto con pendiente | `test_instalar.PruebaInstalarEscrituras.test_config_existente_intacto_con_pendiente` |
+| `.cmd` ajeno intacto | `test_instalar.PruebaInstalarEscrituras.test_cmd_ajeno_intacto` |
+| Pendiente `no-push` | `test_instalar.PruebaInstalarEscrituras.test_pendiente_no_push` |
+| Push anulado sin pendiente | `test_instalar.PruebaInstalarEscrituras.test_push_anulado_sin_pendiente` |
+| Aviso al arrancar `orq correr` | `test_instalar.PruebaInstalarEscrituras.test_aviso_al_arrancar_orq_correr` |
+| CLI `orq instalar` simula | `test_instalar.PruebaOrqInstalar.test_cli_instalar_simula` |
+| Guía `docs/INSTALAR.md` al día | `test_instalar.PruebaGuiaInstalar.test_guia_al_dia` |

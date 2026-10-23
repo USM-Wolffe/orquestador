@@ -46,8 +46,10 @@ class PruebaDocumentacion(unittest.TestCase):
     def test_leeme_documenta_comandos_y_cowork(self):
         texto = (RAIZ_REPO / "LEEME.md").read_text(encoding="utf-8")
         for comando in ("orq.py correr", "orq.py estado", "orq.py tarea", "orq.py proyecto nuevo",
-                        "orq.py importar-v0", "--sin-tablero", "--permitir-codigo-modificado", "--aplicar"):
+                        "orq.py importar-v0", "orq.py instalar", "--sin-tablero",
+                        "--permitir-codigo-modificado", "--aplicar"):
             self.assertIn(comando, texto)
+        self.assertIn("docs/INSTALAR.md", texto)
         self.assertIn(r"Orquestador-Cowork\<proyecto>", texto)
         self.assertIn("código de 6 dígitos", texto)
         self.assertIn("py -3.12 puente.py --una-vez", texto)  # la parte del v0 sigue ahí
