@@ -152,19 +152,28 @@ def _minutos_desde(desde, ahora: dt.datetime) -> int | None:
     return max(0, int((ahora - inicio).total_seconds() // 60))
 
 
+NOMBRES_AGENTE = {"cc": "Claude Code", "codex": "Codex", "cursor": "Cursor"}
+
+
+def _nombre_agente(tarea: dict) -> str:
+    agente = tarea.get("agente")
+    return NOMBRES_AGENTE.get(agente, agente or "el agente")
+
+
 def texto_estacion(tarea: dict, por_id: dict | None = None, anterior: str | None = None,
                    ahora: dt.datetime | None = None, agentes: dict | None = None,
                    desde: str | None = None) -> str:
     """Texto del estado de una estación del plan (design D6). Nunca es solo el nombre interno."""
     estado = tarea.get("estado")
     agentes = agentes or {}
+    nombre = _nombre_agente(tarea)
     if estado == "hecha":
-        return "Hecha"
+        return f"Hecha por {nombre}"
     if estado == "esperando_gate":
         return "Te espera"
     if estado == "en_curso":
         minutos = _minutos_desde(desde or tarea.get("iniciada") or tarea.get("actualizada"), ahora) if ahora else None
-        return f"Trabajando, {minutos} min" if minutos is not None else "Trabajando"
+        return f"{nombre} trabajando hace {minutos} min" if minutos is not None else f"{nombre} trabajando"
     if estado == "bloqueada":
         por_id = por_id or {}
         abiertas = [d for d in tarea.get("dependencias") or [] if (por_id.get(d) or {}).get("estado") != "hecha"]

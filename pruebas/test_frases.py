@@ -89,14 +89,14 @@ class PruebaTextoEstacion(unittest.TestCase):
         return {"id": "T-1", "estado": estado, "agente": "cc", **extra}
 
     def test_estados_simples(self):
-        self.assertEqual(frases.texto_estacion(self.tarea("hecha"), ahora=AHORA), "Hecha")
+        self.assertEqual(frases.texto_estacion(self.tarea("hecha"), ahora=AHORA), "Hecha por Claude Code")
         self.assertEqual(frases.texto_estacion(self.tarea("esperando_gate"), ahora=AHORA), "Te espera")
         self.assertEqual(frases.texto_estacion(self.tarea("cancelada"), ahora=AHORA), "Cancelada")
         self.assertEqual(frases.texto_estacion(self.tarea("pendiente"), ahora=AHORA), "En cola")
 
     def test_trabajando_con_minutos(self):
         t = self.tarea("en_curso", iniciada="2026-10-22T14:00:00-03:00")
-        self.assertEqual(frases.texto_estacion(t, ahora=AHORA), "Trabajando, 12 min")
+        self.assertEqual(frases.texto_estacion(t, ahora=AHORA), "Claude Code trabajando hace 12 min")
 
     def test_bloqueada(self):
         por_id = {"T-2": {"estado": "en_curso"}, "T-9": {"estado": "pendiente"}}

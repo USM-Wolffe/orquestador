@@ -54,8 +54,10 @@ pruebas no usan red ni agentes reales: los agentes se simulan con `pruebas/falso
   - El paso 6 pasa a validar `operacion-v1`.
 
   Verifica: `test_documentacion` exige el paso 7 con las cinco capas y los campos `tools` y `mcp_servers`.
-- [ ] 1.5 (S) **[Sebastian]** Correr el paso 7 con el binario real y anotar el resultado de cada capa. Llenar la
+- [x] 1.5 (S) **[Sebastian]** Correr el paso 7 con el binario real y anotar el resultado de cada capa. Llenar la
   lista tolerada de `cc` con lo que reporte el comando completo y anotar la escala de `utilization`.
+
+  Hecho el 23-10-2026 con Claude Code 2.1.306 (`verificar_op1.py`, `informe_op1.json`): sin capas, 49 herramientas `mcp__` y 7 servidores; `--strict-mcp-config` solo, la variable sola y `disableClaudeAiConnectors` desde `--settings` solo dejan 0 y 0; `--disallowedTools` y `deny` solos quitan las herramientas pero dejan los 7 servidores conectados; el comando completo del adaptador da 0 y 0, con `tools` = Bash, Edit, Glob, Grep, Read, Skill y Write (pedido menos TodoWrite, sin herramientas propias). La lista tolerada queda vacía. `utilization` llegó en escala 0..1 (0,85, `allowed_warning`).
 
   Verifica: una tarea real de `cc` llega a `fin` sin error de seguridad y su `inicio` no trae ningún `mcp__`.
 

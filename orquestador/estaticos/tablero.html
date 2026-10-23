@@ -11,33 +11,38 @@
 <header class="barra">
   <h1>Orquestador</h1>
   <select id="f-proyecto" class="proyecto" aria-label="Proyecto"></select>
-  <div class="vivo"><span class="pulso" aria-hidden="true"></span><span id="vivo">Funcionando</span></div>
+  <div class="vivo"><span class="lampara" aria-hidden="true"></span><span id="vivo">Al día</span></div>
 </header>
 <p id="aviso" class="aviso" hidden></p>
 <main>
-  <section class="turno" aria-labelledby="t-turno">
-    <h2 id="t-turno">Te toca decidir</h2>
-    <p class="sub" id="turno-sub"></p>
+  <section id="seccion-turno" class="placa" aria-labelledby="t-turno">
+    <div class="turno-cab">
+      <span class="senal" aria-hidden="true"></span>
+      <div>
+        <h2 id="t-turno">Te toca decidir</h2>
+        <p class="sub" id="turno-sub"></p>
+      </div>
+    </div>
     <div id="turno"></div>
-  </section>
-  <section aria-labelledby="t-ahora">
-    <h2 id="t-ahora">Ahora mismo</h2>
-    <p class="sub">Qué hace cada agente en este momento y cuánto le queda de su plan hoy. <a href="/consumo">Ver el consumo</a></p>
-    <div class="equipo" id="agentes"></div>
   </section>
   <section aria-labelledby="t-plan">
     <h2 id="t-plan">El plan</h2>
-    <p class="sub">Cada línea es un cambio. Las tareas avanzan de izquierda a derecha y cada una espera a la anterior. El color dice quién la hace.</p>
-    <div class="plan">
+    <p class="sub">Cada vía es un cambio y cada señal una tarea. Se avanza de izquierda a derecha; el color dice qué agente la hace.</p>
+    <div class="placa vias">
       <div id="plan"></div>
-      <div class="leyenda" aria-label="Qué significa cada punto">
+      <div class="leyenda" aria-label="Qué significa cada señal">
         <span><i class="ley-hecha"></i>Hecha</span>
         <span><i class="ley-trabajando"></i>Trabajando</span>
         <span><i class="ley-espera"></i>Te espera</span>
-        <span><i class="ley-bloqueada"></i>Bloqueada</span>
+        <span><i class="ley-bloqueada"></i>Espera a otra</span>
         <span><i class="ley-fallida"></i>Falló</span>
       </div>
     </div>
+  </section>
+  <section aria-labelledby="t-ahora">
+    <h2 id="t-ahora">Ahora mismo</h2>
+    <p class="sub">Qué hace cada agente y cuánto plan le queda hoy. <a href="/consumo">Ver el consumo</a></p>
+    <div class="cuadrilla" id="agentes"></div>
   </section>
 </main>
 <div class="velo" id="velo" aria-hidden="true">

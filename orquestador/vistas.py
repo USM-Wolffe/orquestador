@@ -99,7 +99,7 @@ def tarjetas(instantanea: dict, ahora: dt.datetime, proyecto: str | None = None,
 
 
 _VEREDICTOS = {"sin reparos": "sin_reparos", "con reparos": "con_reparos", "no concluyente": "no_concluyente"}
-NOMBRES_AGENTE = {"cc": "Claude Code", "codex": "Codex", "cursor": "Cursor"}
+NOMBRES_AGENTE = frases.NOMBRES_AGENTE
 
 
 def veredicto_revision(informe: str | None) -> tuple[str, str | None]:

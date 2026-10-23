@@ -183,8 +183,8 @@ class PruebaDefensas(PruebaOrq):
         self.assertNotIn(b"new Function", js)
         self.assertIn(b"textContent", js)
         self.assertIn("Dura 2 minutos. Así nadie más puede aprobar por ti.".encode("utf-8"), js)
-        self.assertIn("color-mix(in srgb,var(--color) 22%,transparent)", css_t)
-        self.assertIn(".trabajando .punto", css_t)
+        self.assertIn("color-mix(in srgb,var(--color) 25%,transparent)", css_t)
+        self.assertIn(".trabajando .luz", css_t)
 
     def test_estaticos_sin_sesion_y_pagina_401(self):
         sin = ClienteTablero(self.cliente.puerto)
@@ -295,7 +295,7 @@ class PruebaKanbanDetalleConsumo(PruebaOrq):
         self.assertEqual(d["niveles"]["bypass"], "duro")
         js = self.cliente.pedir("GET", "/static/app.js")[2]
         self.assertIn(b'"Aprobar"', js)
-        self.assertIn(b'"Rechazar con nota"', js)
+        self.assertIn('"Rechazar con un comentario"'.encode("utf-8"), js)
 
     def test_diff_durante_la_ejecucion(self):
         self.pedir(self.orq, {"id": "T-1", "prompt": "#guion: edita_y_espera"})
@@ -379,7 +379,8 @@ class PruebaApiTablero(PruebaOrq):
         js = self.cliente.pedir("GET", "/static/app.js")[2]
         self.assertIn(b"d.estado_texto", js)
         self.assertNotIn(b"${d.estado}`", js)  # el estado interno no va en el encabezado del panel
-        self.assertIn(b"tareas terminaron y esperan", js)
+        self.assertIn("decisiones te esperan".encode("utf-8"), js)
+        self.assertIn("Nada te espera".encode("utf-8"), js)
 
     def test_solo_lee_eventos_de_tareas_en_curso_o_en_gate(self):
         self.poner_tarea(self.orq, "hecha", id="T-1")

@@ -91,22 +91,23 @@ function panelGate(d, s, p, id) {
   caja.className = "gate";
   const nota = el("textarea");
   nota.placeholder = "Nota (obligatoria para rechazar)";
-  const aprobar = el("button", "Aprobar", "btn btn-turno");
-  const rechazar = el("button", "Rechazar con nota", "btn btn-sec");
+  const aprobar = el("button", "Aprobar", "btn btn-firme");
+  const rechazar = el("button", "Rechazar con un comentario", "btn");
   const cajaCodigo = el("div", null, "codigo");
   cajaCodigo.hidden = true;
-  const etiqueta = el("label", "Escribe el código que apareció en la ventana del orquestador.");
+  const etiqueta = el("label", "Escribe el código que apareció en la ventana del orquestador");
   etiqueta.htmlFor = "cod";
   const codigo = el("input");
   codigo.id = "cod";
   codigo.inputMode = "numeric";
   codigo.maxLength = 6;
-  codigo.placeholder = "······";
-  const confirmar = el("button", "Confirmar aprobación", "btn btn-turno");
+  codigo.placeholder = "000000";
+  codigo.setAttribute("aria-label", "Código");
+  const confirmar = el("button", "Confirmar la aprobación", "btn btn-firme");
   const fila = el("div", null, "acciones");
   fila.append(codigo, confirmar);
-  const notaCodigo = el("p", "Dura 2 minutos. Así nadie más puede aprobar por ti.");
-  cajaCodigo.append(etiqueta, fila, notaCodigo);
+  const notaCodigo = el("p", "Dura 2 minutos. Así nadie más puede aprobar por ti.", "nota");
+  cajaCodigo.append(etiqueta, notaCodigo, fila);
   const mensaje = el("p", "", "mensaje");
   const acciones = el("div", null, "acciones");
   acciones.append(aprobar, rechazar);
@@ -131,7 +132,7 @@ function panelGate(d, s, p, id) {
   }
   async function preparar(dec) {
     decision = dec;
-    confirmar.textContent = dec === "aprobar" ? "Confirmar aprobación" : "Confirmar rechazo";
+    confirmar.textContent = dec === "aprobar" ? "Confirmar la aprobación" : "Confirmar el rechazo";
     const [estado, datos] = await enviar("preparar", { decision: dec, huella: d.gate.huella, nota: nota.value || null });
     if (estado === 200) {
       mensaje.textContent = datos.mensaje;
@@ -236,15 +237,22 @@ async function tablero() {
   async function pintar() {
     const proyecto = select.value || s.proyectos[0] || "";
     const d = await api(`/api/tablero?proyecto=${encodeURIComponent(proyecto)}`);
-    $("#vivo").textContent = d.momento ? `Funcionando · revisado ${hace(d.momento)}` : "Funcionando";
+    $("#vivo").textContent = d.momento ? `Al día, revisado ${hace(d.momento)}` : "Al día";
     // Te toca decidir
     const n = d.turno.length;
-    $("#turno-sub").textContent = n === 0 ? "" : (n === 1
-      ? "1 tarea terminó y espera tu aprobación. Nada avanza en ese cambio hasta que decidas."
-      : `${n} tareas terminaron y esperan tu aprobación. Nada avanza en esos cambios hasta que decidas.`);
-    if (!d.turno.length) {
-      $("#turno").replaceChildren(el("p", "Nada que decidir ahora"));
+    const seccionTurno = $("#seccion-turno");
+    if (n === 0) {
+      seccionTurno.className = "placa";
+      $("#t-turno").textContent = "Nada te espera";
+      $("#turno-sub").textContent =
+        "Los agentes siguen trabajando. Te aviso cuando algo necesite tu decisión.";
+      $("#turno").replaceChildren();
     } else {
+      seccionTurno.className = "placa turno";
+      $("#t-turno").textContent = n === 1 ? "Una decisión te espera" : `${n} decisiones te esperan`;
+      $("#turno-sub").textContent = n === 1
+        ? "Ese cambio no avanza hasta que decidas."
+        : "Esos cambios no avanzan hasta que decidas.";
       const decisiones = d.turno.map((g) => {
         const caja = el("div", null, "decision");
         const texto = el("div");
@@ -252,17 +260,23 @@ async function tablero() {
         if (g.explicacion) texto.append(el("p", g.explicacion));
         const evidencia = el("div", null, "evidencia");
         const archivos = el("span");
-        archivos.append(el("b", g.archivos), document.createTextNode(" archivos cambiados"));
+        archivos.append(el("b", g.archivos), document.createTextNode("archivos cambiados"));
         evidencia.append(archivos);
-        if (g.pruebas) evidencia.append(el("span", g.pruebas.ok ? "Pruebas en verde" : "Pruebas: fallaron"));
+        if (g.pruebas) {
+          evidencia.append(el("span", g.pruebas.ok ? "Pruebas en verde" : "Pruebas: fallaron"));
+        }
         const revision = el("span");
         if (g.revision) {
-          revision.append(document.createTextNode("Revisión: "),
-            el("b", VEREDICTOS[g.revision.veredicto] || g.revision.veredicto));
+          const veredicto = VEREDICTOS[g.revision.veredicto] || g.revision.veredicto;
+          if (g.revision.veredicto === "sin_reparos") {
+            revision.append(el("b", "Sin reparos"), document.createTextNode("en la revisión"));
+          } else {
+            revision.append(document.createTextNode("Revisión: "), el("b", veredicto));
+          }
         } else revision.textContent = "Sin revisión";
         evidencia.append(revision);
         texto.append(evidencia);
-        const boton = el("button", "Revisar y decidir", "btn btn-turno");
+        const boton = el("button", "Revisar y decidir", "btn btn-firme");
         boton.onclick = () => abrirPanel(g.proyecto || proyecto, g.id);
         caja.append(texto, boton);
         return caja;
@@ -271,44 +285,42 @@ async function tablero() {
     }
     // Ahora mismo
     const filas = d.agentes.map((a) => {
-      const fila = el("div", null, a.estado === "apagado" ? "agente apagado" : "agente");
-      const quien = el("div", null, "quien");
-      quien.append(el("span", null, `ficha ${claseAgente(a.agente)}`), document.createTextNode(a.nombre));
-      const que = el("div", null, "que");
-      const titulo = a.estado === "trabajando" ? a.tarea : (a.estado === "plan_agotado" ? "Plan agotado" : (a.estado === "apagado" ? "Apagado" : "Disponible"));
-      que.append(el("b", titulo || "Disponible"));
-      const detalle = a.frase ? `${a.frase} · ${hace(a.frase_en)}` : (a.motivo || "");
-      que.append(el("span", detalle));
-      const medidor = el("div", null, "medidor");
+      const clases = ["placa", "agente", claseAgente(a.agente)];
+      if (a.estado === "apagado") clases.push("apagado");
+      const fila = el("div", null, clases.join(" "));
+      fila.append(el("h3", a.nombre));
+      const titulo = a.estado === "trabajando" ? a.tarea
+        : (a.estado === "plan_agotado" ? "Plan agotado"
+          : (a.estado === "apagado" ? "Apagado" : "Disponible"));
+      fila.append(el("span", titulo || "Disponible", "accion"));
+      const detalle = a.frase ? `${a.frase} ${hace(a.frase_en)}` : (a.motivo || "");
+      fila.append(el("span", detalle, "cuando"));
       if (a.plan && a.plan.uso !== null && a.plan.uso !== undefined) {
-        medidor.append(document.createTextNode(
-          `Plan: ${Math.round(a.plan.uso * 100)} % usado · según Claude Code, ${hace(a.plan.visto_en)}`));
         const meter = document.createElement("meter");
         meter.min = "0"; meter.max = "1"; meter.value = String(a.plan.uso);
-        medidor.append(meter);
-      } else {
-        medidor.textContent = `${a.hoy.minutos} min de trabajo · ${a.hoy.tareas} tareas hoy`;
+        fila.append(meter);
+        fila.append(el("span", `${Math.round(a.plan.uso * 100)} % del plan usado hoy`, "uso"));
+      } else if (a.estado !== "apagado") {
+        fila.append(el("span", `${a.hoy.minutos} min de trabajo, ${a.hoy.tareas} tareas hoy`, "uso"));
       }
-      fila.append(quien, que, medidor);
       return fila;
     });
     $("#agentes").replaceChildren(...filas);
     // El plan
     const lineas = d.plan.map((linea) => {
-      const caja = el("div", null, "linea");
-      const header = el("header");
-      header.append(el("h3", linea.cambio),
-        el("span", `${linea.listas} de ${linea.total} listas${linea.nota ? " · " + linea.nota : ""}`));
-      const via = el("div", null, "via");
+      const caja = el("div", null, "via");
+      const cab = el("div", null, "via-cab");
+      cab.append(el("h3", linea.cambio),
+        el("span", `${linea.listas} de ${linea.total} listas${linea.nota ? ", " + linea.nota : ""}`));
+      const tramo = el("div", null, "tramo");
       for (const e of linea.estaciones) {
-        const boton = el("button", null, `estacion ${e.forma} ${claseAgente(e.agente)}`);
+        const boton = el("button", null, `est ${e.forma} ${claseAgente(e.agente)}`);
         boton.type = "button";
-        const punto = el("span", e.forma === "hecha" ? "✓" : (e.forma === "espera" ? "!" : ""), "punto");
-        boton.append(punto, el("b", e.titulo), el("small", e.texto));
+        boton.append(el("span", null, "luz"), el("b", e.titulo), el("small", e.texto));
         boton.onclick = () => abrirPanel(linea.proyecto || proyecto, e.id);
-        via.append(boton);
+        tramo.append(boton);
       }
-      caja.append(header, via);
+      caja.append(cab, tramo);
       return caja;
     });
     $("#plan").replaceChildren(...lineas);
